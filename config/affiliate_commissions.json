@@ -1,0 +1,11 @@
+{
+  "source": "https://www.mercadolivre.com.br/ajuda/27913",
+  "site_id": "MLB",
+  "version": "manual-validation-required",
+  "rules": [],
+  "notes": [
+    "A tabela oficial de percentuais deve ser validada na página do programa de Afiliados antes de preencher as regras.",
+    "As regras podem ser associadas por categoria do Mercado Livre e/ou trecho da hierarquia de categorias.",
+    "Não usar percentuais encontrados em fontes de terceiros como fonte de verdade."
+  ]
+}
