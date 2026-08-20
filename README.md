@@ -11,6 +11,8 @@ Mercado Livre API
       ↓
 Busca de produtos de catálogo
       ↓
+Filtro pelo domínio predominante
+      ↓
 Oferta vencedora (buy box)
       ↓ se não existir
 Ofertas associadas ao produto
@@ -25,7 +27,7 @@ Regra de comissão por categoria
       ↓
 Opportunity Score provisório
       ↓
-TOP oportunidades
+TOP oportunidades + diagnóstico
       ↓
 CSV
 ```
@@ -45,7 +47,11 @@ O MVP utiliza recursos oficiais do Mercado Livre para:
 
 A versão atual prefere `buy_box_winner`. Quando ele vem vazio, usa a primeira oferta concreta retornada por `/products/{product_id}/items`. O CSV registra essa decisão no campo `offer_source`, com os valores `buy_box_winner` ou `product_items`. Produtos sem nenhuma oferta disponível continuam sendo ignorados.
 
-A comissão de afiliado é mantida em `config/affiliate_commissions.json`. Os percentuais não são preenchidos automaticamente a partir de fontes de terceiros: a tabela oficial do programa deve ser validada e cadastrada antes de o score usar esse componente.
+Para reduzir falsos positivos, como livros em uma busca por air fryer, a coleta identifica o `domain_id` mais frequente nos resultados e mantém somente esse domínio. A saída mostra quantos produtos foram encontrados, filtrados, atendidos pela buy box, atendidos pelo fallback e descartados por falta de oferta.
+
+O MVP não depende de `/items/{item_id}`, pois esse recurso pode estar bloqueado para a aplicação. O permalink do anúncio permanece vazio até existir uma fonte oficial acessível para obtê-lo.
+
+A comissão de afiliado é mantida em `config/affiliate_commissions.json`. O `category_path` oficial é preservado no CSV para casar com essas regras. Os percentuais não são preenchidos automaticamente a partir de fontes de terceiros: a tabela oficial do programa deve ser validada e cadastrada antes de o score usar esse componente.
 
 ## Princípios
 
@@ -114,7 +120,7 @@ O resultado será salvo em:
 data/oportunidades.csv
 ```
 
-O número de produtos analisados ainda pode ser menor que o limite solicitado quando não houver nenhuma oferta associada.
+O número de produtos analisados ainda pode ser menor que o limite solicitado quando não houver nenhuma oferta associada ou o produto pertencer a outro domínio.
 
 ## Próximas evoluções
 
