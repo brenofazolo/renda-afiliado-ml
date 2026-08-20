@@ -2,14 +2,16 @@
 
 Motor inicial para descoberta, análise e priorização de oportunidades para afiliados do Mercado Livre.
 
-## MVP 0.2
+## MVP 0.3
 
 Fluxo atual:
 
 ```text
 Mercado Livre API
       ↓
-Busca de produtos
+Busca de produtos de catálogo
+      ↓
+Oferta vencedora (buy box)
       ↓
 Categoria + hierarquia
       ↓
@@ -32,15 +34,13 @@ O projeto continua deliberadamente simples. A prioridade é colocar a operação
 
 O MVP utiliza recursos oficiais do Mercado Livre para:
 
-- busca de anúncios;
-- detalhe/categoria do anúncio;
-- hierarquia de categorias;
-- ranking de Mais Vendidos (`/highlights`);
-- preço e desconto quando disponíveis;
-- frete/logística;
-- atributos básicos do anúncio.
+- busca de produtos ativos de catálogo (`/products/search`);
+- detalhe do produto e oferta vencedora, quando disponível (`/products/{product_id}`);
+- detalhe e hierarquia da categoria (`/categories/{category_id}`);
+- ranking de Mais Vendidos do produto (`/highlights/{site_id}/product/{product_id}`);
+- preço, desconto, frete e logística informados na oferta vencedora.
 
-A API oficial documenta o recurso `/highlights` para consultar os 20 principais produtos/itens de uma categoria e também a posição de um item no ranking. A consulta exige autenticação.
+A API também oferece `/products/{product_id}/items` para listar as publicações concorrentes de uma página de produto. Para manter este MVP simples, a versão atual usa somente `buy_box_winner`. Produtos sem uma oferta vencedora são ignorados.
 
 A comissão de afiliado é mantida em `config/affiliate_commissions.json`. Os percentuais não são preenchidos automaticamente a partir de fontes de terceiros: a tabela oficial do programa deve ser validada e cadastrada antes de o score usar esse componente.
 
@@ -60,6 +60,8 @@ A comissão de afiliado é mantida em `config/affiliate_commissions.json`. Os pe
 git clone https://github.com/brenofazolo/renda-afiliado-ml.git
 cd renda-afiliado-ml
 ```
+
+Se o repositório já estiver no GitHub Desktop, clique em **Fetch origin** e depois em **Pull origin**.
 
 ### 2. Criar ambiente virtual
 
@@ -97,9 +99,9 @@ MELI_LIMIT=20
 
 **Nunca faça commit do `.env`.** Ele já está no `.gitignore`.
 
-### 5. Executar o primeiro teste
+### 5. Executar o teste
 
-```bash
+```powershell
 python -m app.main --query "air fryer" --limit 20
 ```
 
@@ -109,9 +111,12 @@ O resultado será salvo em:
 data/oportunidades.csv
 ```
 
+O número de produtos analisados pode ser menor que o limite solicitado, porque produtos sem `buy_box_winner` são ignorados.
+
 ## Próximas evoluções
 
 - validar e cadastrar a tabela oficial de comissão;
+- avaliar todas as ofertas concorrentes por produto;
 - coletar reviews e reputação do vendedor;
 - histórico de preços, posições e avaliações;
 - tendência própria;
