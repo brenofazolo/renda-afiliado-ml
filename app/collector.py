@@ -16,7 +16,7 @@ def _headers() -> dict[str, str]:
 
 
 def search_items(query: str, limit: int = 20, site_id: str = "MLB") -> list[dict[str, Any]]:
-    """Busca produtos de catálogo e devolve a oferta vencedora de cada produto."""
+    """Busca produtos de catálogo e devolve uma oferta concreta de cada produto."""
     limit = max(1, min(limit, 50))
     response = requests.get(
         f"{BASE_URL}/products/search",
@@ -35,14 +35,22 @@ def search_items(query: str, limit: int = 20, site_id: str = "MLB") -> list[dict
             continue
 
         detail = get_product(product_id)
-        winner = detail.get("buy_box_winner")
-        if not winner:
+        offer = detail.get("buy_box_winner")
+        offer_source = "buy_box_winner"
+
+        if not offer:
+            related_items = get_product_items(product_id)
+            offer = next(iter(related_items), None)
+            offer_source = "product_items"
+
+        if not offer:
             continue
 
-        item = dict(winner)
-        item["id"] = winner.get("item_id")
+        item = dict(offer)
+        item["id"] = offer.get("item_id")
         item["title"] = detail.get("name") or product.get("name")
         item["catalog_product_id"] = product_id
+        item["offer_source"] = offer_source
         item["permalink"] = detail.get("permalink")
         item["pictures"] = detail.get("pictures") or []
         first_picture = next(iter(item["pictures"]), {})
@@ -64,6 +72,17 @@ def get_product(product_id: str) -> dict[str, Any]:
     )
     response.raise_for_status()
     return response.json()
+
+
+def get_product_items(product_id: str) -> list[dict[str, Any]]:
+    """Consulta as ofertas associadas a um produto de catálogo."""
+    response = requests.get(
+        f"{BASE_URL}/products/{quote_plus(product_id)}/items",
+        headers=_headers(),
+        timeout=20,
+    )
+    response.raise_for_status()
+    return response.json().get("results", [])
 
 
 def get_item(item_id: str) -> dict[str, Any]:
@@ -90,6 +109,7 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         "position": item.get("_collection_position"),
         "catalog_product_id": item.get("catalog_product_id"),
         "item_id": item.get("id"),
+        "offer_source": item.get("offer_source"),
         "title": item.get("title"),
         "category_id": item.get("category_id"),
         "seller_id": item.get("seller_id"),
