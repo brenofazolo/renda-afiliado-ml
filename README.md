@@ -63,7 +63,7 @@ Eletrodomésticos
 
 Esta versão inclui somente a tabela normal para afiliados generalistas. A tabela de cupons personalizados foi deliberadamente deixada para uma fase posterior.
 
-A comissão exibida é uma estimativa calculada sobre o preço coletado. A elegibilidade da venda, a atribuição, eventuais ganhos extras, cancelamentos, impostos e o pagamento final dependem das regras e da validação do Programa de Afiliados e Criadores do Mercado Livre. A fonte registrada para as faixas é a página oficial [Quanto se ganha por venda](https://www.mercadolivre.com.br/ajuda/27913).
+As comissões direta e indireta são exibidas separadamente como estimativas calculadas sobre o preço coletado. Somente a comissão direta participa do score atual. A indireta permanece como indicador informativo, pois representa uma compra alternativa e não deve ser somada à direta como se ambas ocorressem na mesma venda.\n\nA elegibilidade da venda, a atribuição, eventuais ganhos extras, cancelamentos, impostos e o pagamento final dependem das regras e da validação do Programa de Afiliados e Criadores do Mercado Livre. A fonte registrada para as faixas é a página oficial [Quanto se ganha por venda](https://www.mercadolivre.com.br/ajuda/27913).
 
 ## Princípios
 
