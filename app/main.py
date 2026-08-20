@@ -44,7 +44,7 @@ def main() -> None:
             item["category_name"] = None
             item["category_path"] = None
 
-        best_seller = get_best_seller_position(item["item_id"], args.site)
+        best_seller = get_best_seller_position(item["catalog_product_id"], args.site)
         item["best_seller_position"] = best_seller.get("position") if best_seller else None
         item["best_seller_category"] = best_seller.get("label") if best_seller else None
 
