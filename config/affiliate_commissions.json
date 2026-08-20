@@ -1,11 +1,62 @@
 {
   "source": "https://www.mercadolivre.com.br/ajuda/27913",
   "site_id": "MLB",
-  "version": "manual-validation-required",
-  "rules": [],
+  "program": "afiliados_generalistas",
+  "version": "2026-08-20",
+  "rules": [
+    {
+      "label": "Faixa 16% / 8%",
+      "matches": [
+        "Beleza e Cuidado Pessoal",
+        "Calçados, Roupas e Bolsas",
+        "Esportes e Fitness",
+        "Acessórios para Veículos",
+        "Bebês",
+        "Brinquedos e Hobbies",
+        "Casa, Móveis e Decoração",
+        "Construção",
+        "Ferramentas",
+        "Games",
+        "Joias e Relógios",
+        "Livros, Revistas e Comics",
+        "Mais Categorias"
+      ],
+      "direct_percent": 16,
+      "indirect_percent": 8
+    },
+    {
+      "label": "Faixa 12% / 6%",
+      "matches": [
+        "Câmeras e Acessórios",
+        "Celulares e Telefones",
+        "Eletrodomésticos",
+        "Eletrônicos, Áudio e Vídeo",
+        "Informática"
+      ],
+      "direct_percent": 12,
+      "indirect_percent": 6
+    },
+    {
+      "label": "Faixa 5% / 2,5%",
+      "matches": [
+        "Alimentos e Bebidas"
+      ],
+      "direct_percent": 5,
+      "indirect_percent": 2.5
+    },
+    {
+      "label": "Sem comissão",
+      "matches": [
+        "Imóveis"
+      ],
+      "direct_percent": 0,
+      "indirect_percent": 0
+    }
+  ],
   "notes": [
-    "A tabela oficial de percentuais deve ser validada na página do programa de Afiliados antes de preencher as regras.",
-    "As regras podem ser associadas por categoria do Mercado Livre e/ou trecho da hierarquia de categorias.",
-    "Não usar percentuais encontrados em fontes de terceiros como fonte de verdade."
+    "Regras da tabela normal para afiliados generalistas.",
+    "O casamento usa somente a categoria raiz do category_path oficial.",
+    "A tabela de cupons personalizados não faz parte desta versão.",
+    "Os valores calculados são estimativas; a elegibilidade e o pagamento final dependem das regras do programa e da validação da venda."
   ]
 }
