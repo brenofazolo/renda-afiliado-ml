@@ -2,7 +2,7 @@
 
 Motor inicial para descoberta, análise e priorização de oportunidades para afiliados do Mercado Livre.
 
-## MVP 0.3
+## MVP 0.4
 
 Fluxo atual:
 
@@ -12,6 +12,8 @@ Mercado Livre API
 Busca de produtos de catálogo
       ↓
 Oferta vencedora (buy box)
+      ↓ se não existir
+Ofertas associadas ao produto
       ↓
 Categoria + hierarquia
       ↓
@@ -36,11 +38,12 @@ O MVP utiliza recursos oficiais do Mercado Livre para:
 
 - busca de produtos ativos de catálogo (`/products/search`);
 - detalhe do produto e oferta vencedora, quando disponível (`/products/{product_id}`);
+- fallback para uma oferta associada quando `buy_box_winner` estiver vazio (`/products/{product_id}/items`);
 - detalhe e hierarquia da categoria (`/categories/{category_id}`);
 - ranking de Mais Vendidos do produto (`/highlights/{site_id}/product/{product_id}`);
-- preço, desconto, frete e logística informados na oferta vencedora.
+- preço, desconto, frete e logística informados na oferta selecionada.
 
-A API também oferece `/products/{product_id}/items` para listar as publicações concorrentes de uma página de produto. Para manter este MVP simples, a versão atual usa somente `buy_box_winner`. Produtos sem uma oferta vencedora são ignorados.
+A versão atual prefere `buy_box_winner`. Quando ele vem vazio, usa a primeira oferta concreta retornada por `/products/{product_id}/items`. O CSV registra essa decisão no campo `offer_source`, com os valores `buy_box_winner` ou `product_items`. Produtos sem nenhuma oferta disponível continuam sendo ignorados.
 
 A comissão de afiliado é mantida em `config/affiliate_commissions.json`. Os percentuais não são preenchidos automaticamente a partir de fontes de terceiros: a tabela oficial do programa deve ser validada e cadastrada antes de o score usar esse componente.
 
@@ -111,12 +114,12 @@ O resultado será salvo em:
 data/oportunidades.csv
 ```
 
-O número de produtos analisados pode ser menor que o limite solicitado, porque produtos sem `buy_box_winner` são ignorados.
+O número de produtos analisados ainda pode ser menor que o limite solicitado quando não houver nenhuma oferta associada.
 
 ## Próximas evoluções
 
 - validar e cadastrar a tabela oficial de comissão;
-- avaliar todas as ofertas concorrentes por produto;
+- comparar e selecionar a melhor entre todas as ofertas concorrentes;
 - coletar reviews e reputação do vendedor;
 - histórico de preços, posições e avaliações;
 - tendência própria;
