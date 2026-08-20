@@ -16,24 +16,54 @@ def _headers() -> dict[str, str]:
 
 
 def search_items(query: str, limit: int = 20, site_id: str = "MLB") -> list[dict[str, Any]]:
-    """Busca itens no marketplace e devolve os resultados brutos."""
+    """Busca produtos de catálogo e devolve a oferta vencedora de cada produto."""
     limit = max(1, min(limit, 50))
-    url = f"{BASE_URL}/sites/{site_id}/search"
-    params = {"q": query, "limit": limit}
-
-    response = requests.get(url, params=params, headers=_headers(), timeout=20)
+    response = requests.get(
+        f"{BASE_URL}/products/search",
+        params={"status": "active", "site_id": site_id, "q": query, "limit": limit},
+        headers=_headers(),
+        timeout=20,
+    )
     response.raise_for_status()
-    payload = response.json()
 
     collected_at = datetime.now(timezone.utc).isoformat()
-    results = payload.get("results", [])
+    items: list[dict[str, Any]] = []
 
-    for position, item in enumerate(results, start=1):
+    for position, product in enumerate(response.json().get("results", []), start=1):
+        product_id = product.get("id")
+        if not product_id:
+            continue
+
+        detail = get_product(product_id)
+        winner = detail.get("buy_box_winner")
+        if not winner:
+            continue
+
+        item = dict(winner)
+        item["id"] = winner.get("item_id")
+        item["title"] = detail.get("name") or product.get("name")
+        item["catalog_product_id"] = product_id
+        item["permalink"] = detail.get("permalink")
+        item["pictures"] = detail.get("pictures") or []
+        first_picture = next(iter(item["pictures"]), {})
+        item["thumbnail"] = first_picture.get("secure_url") or first_picture.get("url")
         item["_collection_position"] = position
         item["_collected_at"] = collected_at
         item["_query"] = query
+        items.append(item)
 
-    return results
+    return items
+
+
+def get_product(product_id: str) -> dict[str, Any]:
+    """Consulta o detalhe de um produto de catálogo."""
+    response = requests.get(
+        f"{BASE_URL}/products/{quote_plus(product_id)}",
+        headers=_headers(),
+        timeout=20,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def get_item(item_id: str) -> dict[str, Any]:
@@ -58,6 +88,7 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         "collected_at": item.get("_collected_at"),
         "query": item.get("_query"),
         "position": item.get("_collection_position"),
+        "catalog_product_id": item.get("catalog_product_id"),
         "item_id": item.get("id"),
         "title": item.get("title"),
         "category_id": item.get("category_id"),
