@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote_plus
@@ -15,8 +16,13 @@ def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
-def search_items(query: str, limit: int = 20, site_id: str = "MLB") -> list[dict[str, Any]]:
-    """Busca produtos de catálogo e devolve a oferta vencedora de cada produto."""
+def search_items(
+    query: str,
+    limit: int = 20,
+    site_id: str = "MLB",
+    stats: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Busca produtos de catálogo e devolve uma oferta concreta de cada produto."""
     limit = max(1, min(limit, 50))
     response = requests.get(
         f"{BASE_URL}/products/search",
@@ -26,24 +32,59 @@ def search_items(query: str, limit: int = 20, site_id: str = "MLB") -> list[dict
     )
     response.raise_for_status()
 
+    products = response.json().get("results", [])
+    domain_counts = Counter(
+        product.get("domain_id") for product in products if product.get("domain_id")
+    )
+    dominant_domain = domain_counts.most_common(1)[0][0] if domain_counts else None
+
+    collection_stats: dict[str, Any] = {
+        "products_found": len(products),
+        "dominant_domain": dominant_domain,
+        "filtered_by_domain": 0,
+        "with_buy_box": 0,
+        "via_product_items": 0,
+        "without_offer": 0,
+        "analyzed": 0,
+    }
+
     collected_at = datetime.now(timezone.utc).isoformat()
     items: list[dict[str, Any]] = []
 
-    for position, product in enumerate(response.json().get("results", []), start=1):
+    for position, product in enumerate(products, start=1):
+        if dominant_domain and product.get("domain_id") != dominant_domain:
+            collection_stats["filtered_by_domain"] += 1
+            continue
+
         product_id = product.get("id")
         if not product_id:
+            collection_stats["without_offer"] += 1
             continue
 
         detail = get_product(product_id)
-        winner = detail.get("buy_box_winner")
-        if not winner:
+        offer = detail.get("buy_box_winner")
+        offer_source = "buy_box_winner"
+
+        if offer:
+            collection_stats["with_buy_box"] += 1
+        else:
+            related_items = get_product_items(product_id)
+            offer = next(iter(related_items), None)
+            offer_source = "product_items"
+            if offer:
+                collection_stats["via_product_items"] += 1
+
+        if not offer:
+            collection_stats["without_offer"] += 1
             continue
 
-        item = dict(winner)
-        item["id"] = winner.get("item_id")
+        item = dict(offer)
+        item["id"] = offer.get("item_id")
         item["title"] = detail.get("name") or product.get("name")
         item["catalog_product_id"] = product_id
-        item["permalink"] = detail.get("permalink")
+        item["domain_id"] = product.get("domain_id") or detail.get("domain_id")
+        item["offer_source"] = offer_source
+        item["permalink"] = None
         item["pictures"] = detail.get("pictures") or []
         first_picture = next(iter(item["pictures"]), {})
         item["thumbnail"] = first_picture.get("secure_url") or first_picture.get("url")
@@ -51,6 +92,11 @@ def search_items(query: str, limit: int = 20, site_id: str = "MLB") -> list[dict
         item["_collected_at"] = collected_at
         item["_query"] = query
         items.append(item)
+
+    collection_stats["analyzed"] = len(items)
+    if stats is not None:
+        stats.clear()
+        stats.update(collection_stats)
 
     return items
 
@@ -66,12 +112,21 @@ def get_product(product_id: str) -> dict[str, Any]:
     return response.json()
 
 
-def get_item(item_id: str) -> dict[str, Any]:
-    """Consulta o detalhe de um anúncio."""
-    url = f"{BASE_URL}/items/{quote_plus(item_id)}"
-    response = requests.get(url, headers=_headers(), timeout=20)
+def get_product_items(product_id: str) -> list[dict[str, Any]]:
+    """Consulta as ofertas associadas a um produto de catálogo.
+
+    A API pode retornar 404 para produtos ativos que não possuem publicações
+    consultáveis. Nesse caso, o produto é ignorado e a coleta continua.
+    """
+    response = requests.get(
+        f"{BASE_URL}/products/{quote_plus(product_id)}/items",
+        headers=_headers(),
+        timeout=20,
+    )
+    if response.status_code == 404:
+        return []
     response.raise_for_status()
-    return response.json()
+    return response.json().get("results", [])
 
 
 def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -89,7 +144,9 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         "query": item.get("_query"),
         "position": item.get("_collection_position"),
         "catalog_product_id": item.get("catalog_product_id"),
+        "domain_id": item.get("domain_id"),
         "item_id": item.get("id"),
+        "offer_source": item.get("offer_source"),
         "title": item.get("title"),
         "category_id": item.get("category_id"),
         "seller_id": item.get("seller_id"),
