@@ -75,12 +75,18 @@ def get_product(product_id: str) -> dict[str, Any]:
 
 
 def get_product_items(product_id: str) -> list[dict[str, Any]]:
-    """Consulta as ofertas associadas a um produto de catálogo."""
+    """Consulta as ofertas associadas a um produto de catálogo.
+
+    A API pode retornar 404 para produtos ativos que não possuem publicações
+    consultáveis. Nesse caso, o produto é ignorado e a coleta continua.
+    """
     response = requests.get(
         f"{BASE_URL}/products/{quote_plus(product_id)}/items",
         headers=_headers(),
         timeout=20,
     )
+    if response.status_code == 404:
+        return []
     response.raise_for_status()
     return response.json().get("results", [])
 
