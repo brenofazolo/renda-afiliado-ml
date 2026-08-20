@@ -24,14 +24,14 @@ def get_category(category_id: str) -> dict[str, Any]:
     return response.json()
 
 
-def get_best_seller_position(item_id: str, site_id: str = "MLB") -> dict[str, Any] | None:
-    """Consulta a posição do anúncio no ranking de mais vendidos.
+def get_best_seller_position(product_id: str, site_id: str = "MLB") -> dict[str, Any] | None:
+    """Consulta a posição do produto no ranking de mais vendidos.
 
-    A API retorna 404 quando o item não está no top 20 de nenhuma categoria.
+    A API retorna 404 quando o produto não está no top 20 de nenhuma categoria.
     Nesse caso, retornamos None e seguimos normalmente.
     """
     response = requests.get(
-        f"{BASE_URL}/highlights/{site_id}/item/{quote_plus(item_id)}",
+        f"{BASE_URL}/highlights/{site_id}/product/{quote_plus(product_id)}",
         headers=_headers(),
         timeout=20,
     )
