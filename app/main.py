@@ -82,18 +82,34 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(items)
 
+    print("RELATÓRIO DA COLETA")
     print(f"Consulta: {args.query}")
-    print(f"Produtos encontrados: {collection_stats.get('products_found', 0)}")
-    print(f"Domínio predominante: {collection_stats.get('dominant_domain') or 'n/d'}")
-    print(f"Filtrados por domínio: {collection_stats.get('filtered_by_domain', 0)}")
-    print(f"Com buy box: {collection_stats.get('with_buy_box', 0)}")
-    print(f"Via fallback /products/{{id}}/items: {collection_stats.get('via_product_items', 0)}")
-    print(f"Sem oferta: {collection_stats.get('without_offer', 0)}")
-    print(f"Produtos analisados: {len(items)}")
-    print(f"Produtos no ranking de mais vendidos: {sum(1 for item in items if item['best_seller_position'])}")
-    print(f"Produtos com regra de comissão configurada: {sum(1 for item in items if item['commission_rule'])}")
-    print(f"Resultado: {OUTPUT_FILE}")
-    print("\nTOP 10")
+    print(f"Resultados da busca: {collection_stats.get('products_found', 0)}")
+    print(f"Domínio identificado: {collection_stats.get('dominant_domain') or 'n/d'}")
+    print(f"Descartados por domínio: {collection_stats.get('filtered_by_domain', 0)}")
+    print(
+        "Produtos sem oferta acessível pela API: "
+        f"{collection_stats.get('without_offer', 0)}"
+    )
+    print(f"Ofertas válidas: {len(items)}")
+    print(
+        "  Via oferta vencedora: "
+        f"{collection_stats.get('with_buy_box', 0)}"
+    )
+    print(
+        "  Via ofertas associadas ao produto: "
+        f"{collection_stats.get('via_product_items', 0)}"
+    )
+    print(
+        "Presentes no ranking de mais vendidos: "
+        f"{sum(1 for item in items if item['best_seller_position'])}"
+    )
+    print(
+        "Com regra de comissão configurada: "
+        f"{sum(1 for item in items if item['commission_rule'])}"
+    )
+    print(f"Arquivo CSV: {OUTPUT_FILE}")
+    print(f"\nTOP OPORTUNIDADES: {len(items)}")
     for index, item in enumerate(items[:10], start=1):
         print(
             f"{index:02d}. Score: {_format_score(item['marketplace_score'])} | "
