@@ -2,7 +2,7 @@
 
 Motor inicial para descoberta, análise e priorização de oportunidades para afiliados do Mercado Livre.
 
-## MVP 0.4
+## MVP 0.5 em teste
 
 Fluxo atual:
 
@@ -13,17 +13,15 @@ Busca de produtos de catálogo
       ↓
 Filtro pelo domínio predominante
       ↓
-Oferta vencedora (buy box)
-      ↓ se não existir
-Ofertas associadas ao produto
+Oferta vencedora ou oferta associada
       ↓
 Categoria + hierarquia
       ↓
-Ranking de Mais Vendidos
+Categoria raiz
       ↓
-Preço + desconto + frete
+Regra de comissão para afiliado generalista
       ↓
-Regra de comissão por categoria
+Preço + comissão estimada
       ↓
 Opportunity Score provisório
       ↓
@@ -45,20 +43,34 @@ O MVP utiliza recursos oficiais do Mercado Livre para:
 - ranking de Mais Vendidos do produto (`/highlights/{site_id}/product/{product_id}`);
 - preço, desconto, frete e logística informados na oferta selecionada.
 
-A versão atual prefere `buy_box_winner`. Quando ele vem vazio, usa a primeira oferta concreta retornada por `/products/{product_id}/items`. O CSV registra essa decisão no campo `offer_source`, com os valores `buy_box_winner` ou `product_items`. Produtos sem nenhuma oferta disponível continuam sendo ignorados.
+A versão atual prefere `buy_box_winner`. Quando ele vem vazio, usa a primeira oferta concreta retornada por `/products/{product_id}/items`. O CSV registra essa decisão no campo `offer_source`. Produtos sem oferta acessível continuam sendo ignorados.
 
-Para reduzir falsos positivos, como livros em uma busca por air fryer, a coleta identifica o `domain_id` mais frequente nos resultados e mantém somente esse domínio. A saída mostra quantos produtos foram encontrados, filtrados, atendidos pela buy box, atendidos pelo fallback e descartados por falta de oferta.
+Para reduzir falsos positivos, a coleta identifica o `domain_id` mais frequente nos resultados e mantém somente esse domínio. A saída mostra quantos produtos foram encontrados, filtrados e associados a ofertas.
 
 O MVP não depende de `/items/{item_id}`, pois esse recurso pode estar bloqueado para a aplicação. O permalink do anúncio permanece vazio até existir uma fonte oficial acessível para obtê-lo.
 
-A comissão de afiliado é mantida em `config/affiliate_commissions.json`. O `category_path` oficial é preservado no CSV para casar com essas regras. Os percentuais não são preenchidos automaticamente a partir de fontes de terceiros: a tabela oficial do programa deve ser validada e cadastrada antes de o score usar esse componente.
+## Comissão de afiliado
+
+As regras ficam centralizadas em `config/affiliate_commissions.json` e usam como chave a categoria raiz do `category_path` oficial. Exemplo:
+
+```text
+Eletrodomésticos > Pequenos Eletrodomésticos > ...
+        ↓
+Eletrodomésticos
+        ↓
+12% direta / 6% indireta
+```
+
+Esta versão inclui somente a tabela normal para afiliados generalistas. A tabela de cupons personalizados foi deliberadamente deixada para uma fase posterior.
+
+A comissão exibida é uma estimativa calculada sobre o preço coletado. A elegibilidade da venda, a atribuição, eventuais ganhos extras, cancelamentos, impostos e o pagamento final dependem das regras e da validação do Programa de Afiliados e Criadores do Mercado Livre. A fonte registrada para as faixas é a página oficial [Quanto se ganha por venda](https://www.mercadolivre.com.br/ajuda/27913).
 
 ## Princípios
 
 - Usar APIs e integrações oficiais sempre que possível.
 - Nunca armazenar tokens ou chaves no Git.
 - Diferenciar dados observados de estimativas.
-- Não inventar comissão de afiliado.
+- Centralizar taxas configuráveis.
 - Registrar data/hora da coleta para construir histórico.
 
 ## Execução local
@@ -79,13 +91,6 @@ Windows PowerShell:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-Windows CMD:
-
-```cmd
-python -m venv .venv
-.venv\Scripts\activate.bat
 ```
 
 ### 3. Instalar dependências
@@ -114,23 +119,14 @@ MELI_LIMIT=20
 python -m app.main --query "air fryer" --limit 20
 ```
 
-O resultado será salvo em:
-
-```text
-data/oportunidades.csv
-```
-
-O número de produtos analisados ainda pode ser menor que o limite solicitado quando não houver nenhuma oferta associada ou o produto pertencer a outro domínio.
+O resultado será salvo em `data/oportunidades.csv`.
 
 ## Próximas evoluções
 
-- validar e cadastrar a tabela oficial de comissão;
-- comparar e selecionar a melhor entre todas as ofertas concorrentes;
+- validar periodicamente as taxas oficiais;
+- tratar cupons personalizados separadamente;
+- comparar ofertas concorrentes;
+- melhorar ranking de mais vendidos;
 - coletar reviews e reputação do vendedor;
 - histórico de preços, posições e avaliações;
-- tendência própria;
-- score de afiliado completo;
-- geração de conteúdo com IA;
-- tracking de links;
-- dashboard;
-- automação periódica.
+- geração de conteúdo, tracking de links e dashboard.
