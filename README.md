@@ -201,12 +201,22 @@ para **Descobrir**, o resultado mais recente é restaurado sem chamar novamente 
 API. O campo aceita produto, marca, tema ou nicho e sugere pesquisas recentes e
 termos configurados em `WEB_SEARCH_SUGGESTIONS`.
 
+Uma sessão já autenticada não volta à tela de login. Por padrão, o acesso expira
+após 30 minutos sem atividade ou 12 horas totais, o que ocorrer primeiro. Esses
+limites podem ser ajustados com `WEB_IDLE_TIMEOUT_MINUTES` e
+`WEB_SESSION_MAX_HOURS`; o botão **Sair** encerra a sessão imediatamente.
+
 O seletor **Quero descobrir por** explicita se o ponto de partida é um produto,
 marca, categoria ou nicho. A lista **Atalhos de descoberta** oferece exemplos
 prontos e preenche automaticamente o tipo e o texto da consulta. Em todos os
 modos, o resultado final continua sendo composto por ofertas comercializáveis;
 o tipo escolhido orienta o contexto inicial da descoberta e fica salvo junto ao
 relatório restaurado.
+
+Nos modos **Categoria** e **Tema ou nicho**, a coleta preserva os diferentes
+domínios retornados pela busca e não injeta o ranking de uma única subcategoria.
+Isso evita que uma consulta ampla, como “casa e cozinha”, seja reduzida apenas
+a espelhos ou a outro tipo de produto dominante naquele momento.
 
 No modo **Marca**, o backend confirma a marca pelo atributo oficial `BRAND` do
 catálogo e usa o título apenas quando esse atributo não estiver disponível. Os

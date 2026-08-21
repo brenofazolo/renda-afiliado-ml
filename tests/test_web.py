@@ -119,6 +119,16 @@ class WebWorkflowTest(unittest.TestCase):
             "beleza e autocuidado", 12, "MLB", search_mode="niche"
         )
 
+    def test_active_login_redirects_and_idle_session_expires(self) -> None:
+        self.assertEqual(self.client.get("/login").status_code, 302)
+        with self.client.session_transaction() as current_session:
+            current_session["last_activity"] = 0
+        response = self.client.get("/", follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Sua sessão expirou".encode(), response.data)
+        with self.client.session_transaction() as current_session:
+            self.assertFalse(current_session.get("authenticated"))
+
 
 if __name__ == "__main__":
     unittest.main()

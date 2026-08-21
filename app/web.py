@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import os
 import secrets
+import time
 from datetime import timedelta
 from functools import wraps
 from typing import Any, Callable
@@ -44,14 +45,22 @@ SEARCH_PRESETS = [
 ]
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = os.getenv("WEB_SECRET_KEY") or secrets.token_hex(32)
+    session_max_hours = _positive_int_env("WEB_SESSION_MAX_HOURS", 12)
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.getenv("WEB_HTTPS_ONLY", "false").lower() == "true",
-        PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=session_max_hours),
     )
     init_db()
 
@@ -60,6 +69,24 @@ def create_app() -> Flask:
         if "csrf_token" not in session:
             session["csrf_token"] = secrets.token_urlsafe(32)
         return {"csrf_token": session["csrf_token"]}
+
+    @app.before_request
+    def enforce_session_lifetime() -> Response | None:
+        if not session.get("authenticated"):
+            return None
+        now = time.time()
+        idle_seconds = _positive_int_env("WEB_IDLE_TIMEOUT_MINUTES", 30) * 60
+        max_seconds = session_max_hours * 3600
+        last_activity = float(session.get("last_activity", now))
+        logged_in_at = float(session.get("logged_in_at", now))
+        if now - last_activity > idle_seconds or now - logged_in_at > max_seconds:
+            session.clear()
+            if request.endpoint != "login":
+                flash("Sua sessão expirou. Entre novamente para continuar.", "info")
+                return redirect(url_for("login"))
+            return None
+        session["last_activity"] = now
+        return None
 
     @app.before_request
     def protect_posts() -> None:
@@ -114,6 +141,8 @@ def create_app() -> Flask:
 
     @app.route("/login", methods=["GET", "POST"])
     def login() -> str | Response:
+        if request.method == "GET" and session.get("authenticated"):
+            return redirect(url_for("index"))
         error = None
         if request.method == "POST":
             expected_user = os.getenv("WEB_USERNAME", "")
@@ -123,6 +152,8 @@ def create_app() -> Flask:
             if expected_user and expected_password and hmac.compare_digest(username, expected_user) and hmac.compare_digest(password, expected_password):
                 session["authenticated"] = True
                 session.permanent = True
+                session["logged_in_at"] = time.time()
+                session["last_activity"] = time.time()
                 return redirect(url_for("index"))
             error = "Usuário ou senha inválidos."
         return render_template("login.html", error=error)

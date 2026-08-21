@@ -112,6 +112,7 @@ def search_items(
     limit: int = 20,
     site_id: str = "MLB",
     stats: dict[str, Any] | None = None,
+    restrict_to_dominant_domain: bool = True,
 ) -> list[dict[str, Any]]:
     """Busca produtos de catálogo e coleta ofertas em paralelo controlado."""
     limit = max(1, min(limit, 50))
@@ -144,7 +145,11 @@ def search_items(
     candidates: list[tuple[int, dict[str, Any], str, str]] = []
 
     for position, product in enumerate(products, start=1):
-        if dominant_domain and product.get("domain_id") != dominant_domain:
+        if (
+            restrict_to_dominant_domain
+            and dominant_domain
+            and product.get("domain_id") != dominant_domain
+        ):
             collection_stats["filtered_by_domain"] += 1
             continue
         candidates.append((position, product, query, collected_at))

@@ -75,7 +75,14 @@ def collect_opportunities(
 
     stage = time.perf_counter()
     collection_stats: dict[str, Any] = {}
-    raw_search_items = search_items(query, limit, site_id, collection_stats)
+    broad_discovery = search_mode in {"category", "niche"}
+    raw_search_items = search_items(
+        query,
+        limit,
+        site_id,
+        collection_stats,
+        restrict_to_dominant_domain=not broad_discovery,
+    )
     search_results = [normalize_item(item) for item in raw_search_items]
     brand_filtered_search = 0
     if search_mode == "brand":
@@ -110,7 +117,7 @@ def collect_opportunities(
     stage = time.perf_counter()
     best_sellers: list[dict[str, Any]] = []
     ranking_stats: dict[str, Any] = {}
-    if dominant_category_id:
+    if dominant_category_id and not broad_discovery:
         best_sellers = get_category_best_sellers(dominant_category_id, site_id)
     timings["ranking"] = time.perf_counter() - stage
 
@@ -182,6 +189,7 @@ def collect_opportunities(
         "dominant_category_label": dominant_category_label,
         "search_results_count": len(search_results),
         "brand_filtered_count": brand_filtered_search + brand_filtered_ranking,
+        "broad_discovery": broad_discovery,
         "started_at": started_at,
         "finished_at": finished_at,
         "elapsed_seconds": time.perf_counter() - started_perf,

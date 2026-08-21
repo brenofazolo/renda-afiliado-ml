@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from app.collector import _build_item, normalize_item
-from app.service import brand_matches, filter_brand_items
+from app.service import brand_matches, collect_opportunities, filter_brand_items
 
 
 class BrandDiscoveryTest(unittest.TestCase):
@@ -44,6 +45,15 @@ class BrandDiscoveryTest(unittest.TestCase):
         )
         self.assertEqual([item["title"] for item in kept], ["Coffee"])
         self.assertEqual(removed, 1)
+
+    def test_category_mode_preserves_multiple_domains_without_single_ranking(self) -> None:
+        with patch("app.service.search_items", return_value=[]) as search:
+            report = collect_opportunities(
+                "casa e cozinha", 50, "MLB", search_mode="category"
+            )
+        self.assertFalse(search.call_args.kwargs["restrict_to_dominant_domain"])
+        self.assertTrue(report["broad_discovery"])
+        self.assertEqual(report["ranking_count"], 0)
 
 
 if __name__ == "__main__":
