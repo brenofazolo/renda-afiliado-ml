@@ -11,7 +11,15 @@ from dotenv import load_dotenv
 from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
 from .service import collect_opportunities
-from .storage import init_db, list_selections, save_selection, update_selection
+from .storage import (
+    init_db,
+    latest_search_run,
+    list_selections,
+    recent_queries,
+    save_search_run,
+    save_selection,
+    update_selection,
+)
 
 load_dotenv()
 
@@ -107,12 +115,16 @@ def create_app() -> Flask:
     @app.route("/", methods=["GET", "POST"])
     @login_required
     def index() -> str:
-        query = request.form.get("query", os.getenv("MELI_QUERY", "air fryer")).strip()
+        latest = latest_search_run() if request.method == "GET" else None
+        query = request.form.get(
+            "query", latest["query"] if latest else os.getenv("MELI_QUERY", "air fryer")
+        ).strip()
         try:
-            limit = max(1, min(int(request.form.get("limit", os.getenv("MELI_LIMIT", "20"))), 50))
+            default_limit = latest["limit"] if latest else os.getenv("MELI_LIMIT", "20")
+            limit = max(1, min(int(request.form.get("limit", default_limit)), 50))
         except ValueError:
             limit = 20
-        report = None
+        report = latest["report"] if latest else None
         error = None
         if request.method == "POST":
             if not query:
@@ -120,9 +132,23 @@ def create_app() -> Flask:
             else:
                 try:
                     report = collect_opportunities(query, limit, os.getenv("MELI_SITE_ID", "MLB"))
+                    save_search_run(query, limit, report)
                 except Exception as exc:  # mensagem operacional sem expor traceback no navegador
                     error = str(exc)
-        return render_template("index.html", query=query, limit=limit, report=report, error=error)
+        configured = os.getenv(
+            "WEB_SEARCH_SUGGESTIONS",
+            "air fryer,perfume feminino,perfume masculino,smartwatch,ferramentas,beleza,casa e cozinha,eletrônicos",
+        )
+        suggestions = list(dict.fromkeys(recent_queries() + [value.strip() for value in configured.split(",") if value.strip()]))
+        return render_template(
+            "index.html",
+            query=query,
+            limit=limit,
+            report=report,
+            error=error,
+            suggestions=suggestions,
+            restored=bool(latest),
+        )
 
     @app.post("/selection/save")
     @login_required

@@ -196,6 +196,11 @@ Cada oportunidade pode ser aprovada ou descartada. Os aprovados aparecem em
 estado da publicação. Os dados ficam no SQLite local `data/pilot.db`, que não é
 versionado pelo Git.
 
+As últimas 30 consultas também ficam no SQLite. Ao retornar de **Minha seleção**
+para **Descobrir**, o resultado mais recente é restaurado sem chamar novamente a
+API. O campo aceita produto, marca, tema ou nicho e sugere pesquisas recentes e
+termos configurados em `WEB_SEARCH_SUGGESTIONS`.
+
 ## Acesso remoto seguro
 
 Não abra a porta 5000 diretamente no roteador. Para acesso externo, use um

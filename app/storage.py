@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +59,17 @@ def init_db() -> None:
             connection.execute(
                 "ALTER TABLE selections ADD COLUMN official_store_id INTEGER"
             )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS search_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                query TEXT NOT NULL,
+                result_limit INTEGER NOT NULL,
+                report_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
 
 
 def save_selection(values: dict[str, Any]) -> None:
@@ -135,3 +147,46 @@ def update_selection(selection_id: int, values: dict[str, Any]) -> None:
                 selection_id,
             ),
         )
+
+
+def save_search_run(query: str, limit: int, report: dict[str, Any]) -> None:
+    with _connect() as connection:
+        connection.execute(
+            "INSERT INTO search_runs (query, result_limit, report_json, created_at) VALUES (?, ?, ?, ?)",
+            (
+                query,
+                limit,
+                json.dumps(report, ensure_ascii=False, default=str),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        connection.execute(
+            "DELETE FROM search_runs WHERE id NOT IN (SELECT id FROM search_runs ORDER BY id DESC LIMIT 30)"
+        )
+
+
+def latest_search_run() -> dict[str, Any] | None:
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT query, result_limit, report_json, created_at FROM search_runs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "query": row["query"],
+        "limit": row["result_limit"],
+        "report": json.loads(row["report_json"]),
+        "created_at": row["created_at"],
+    }
+
+
+def recent_queries(limit: int = 8) -> list[str]:
+    with _connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT query, MAX(id) AS latest_id FROM search_runs
+            GROUP BY query ORDER BY latest_id DESC LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [str(row["query"]) for row in rows]

@@ -41,7 +41,12 @@ class WebWorkflowTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_shortlist_workflow_and_csrf(self) -> None:
-        from app.storage import list_selections
+        from app.storage import (
+            latest_search_run,
+            list_selections,
+            recent_queries,
+            save_search_run,
+        )
 
         self.assertEqual(self.client.post("/selection/save", data={}).status_code, 400)
         response = self.client.post(
@@ -85,6 +90,14 @@ class WebWorkflowTest(unittest.TestCase):
         updated_page = self.client.get("/selections")
         self.assertIn(b"Publicado", updated_page.data)
         self.assertIn(b"Abrir link de afiliado", updated_page.data)
+
+        report = {"items": [{"title": "Produto persistido"}], "elapsed_seconds": 1.2}
+        save_search_run("nicho teste", 20, report)
+        restored = latest_search_run()
+        assert restored
+        self.assertEqual(restored["query"], "nicho teste")
+        self.assertEqual(restored["report"]["items"][0]["title"], "Produto persistido")
+        self.assertIn("nicho teste", recent_queries())
 
 
 if __name__ == "__main__":
