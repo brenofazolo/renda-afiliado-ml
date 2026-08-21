@@ -2,7 +2,7 @@
 
 Motor inicial para descoberta, análise e priorização de oportunidades para afiliados do Mercado Livre.
 
-## MVP 0.5 em teste
+## MVP 0.6 em teste
 
 Fluxo atual:
 
@@ -12,6 +12,14 @@ Mercado Livre API
 Busca de produtos de catálogo
       ↓
 Filtro pelo domínio predominante
+      ↓
+Ofertas válidas da busca
+      ↓
+Categoria predominante das ofertas
+      ↓
+TOP 20 de mais vendidos da categoria
+      ↓
+Adição de produtos do ranking ainda ausentes da busca
       ↓
 Oferta vencedora ou oferta associada
       ↓
@@ -32,6 +40,17 @@ CSV
 
 O projeto continua deliberadamente simples. A prioridade é colocar a operação para funcionar rapidamente e evoluir com dados reais.
 
+## Descoberta de candidatos
+
+O MVP combina duas fontes oficiais de candidatos:
+
+1. `/products/search`, que traz produtos relevantes para a consulta informada;
+2. `/highlights/{site_id}/category/{category_id}`, que traz até 20 produtos mais vendidos da categoria identificada.
+
+Os IDs retornados pelo ranking com `type=PRODUCT` são `catalog_product_id`. Produtos do ranking que já estavam entre as ofertas válidas da busca não são duplicados. Para os demais, o sistema tenta encontrar uma oferta concreta e adicioná-la ao pool final.
+
+O ranking de mais vendidos é um sinal de demanda, não o ranking final. O `TOP OPORTUNIDADES` continua sendo calculado pelo MVP considerando demanda, preço/oferta, comissão, frete, condição, potencial visual e loja oficial.
+
 ## Dados usados
 
 O MVP utiliza recursos oficiais do Mercado Livre para:
@@ -40,12 +59,12 @@ O MVP utiliza recursos oficiais do Mercado Livre para:
 - detalhe do produto e oferta vencedora, quando disponível (`/products/{product_id}`);
 - fallback para uma oferta associada quando `buy_box_winner` estiver vazio (`/products/{product_id}/items`);
 - detalhe e hierarquia da categoria (`/categories/{category_id}`);
-- ranking de Mais Vendidos do produto (`/highlights/{site_id}/product/{product_id}`);
+- TOP de Mais Vendidos por categoria (`/highlights/{site_id}/category/{category_id}`);
 - preço, desconto, frete e logística informados na oferta selecionada.
 
 A versão atual prefere `buy_box_winner`. Quando ele vem vazio, usa a primeira oferta concreta retornada por `/products/{product_id}/items`. O CSV registra essa decisão no campo `offer_source`. Produtos sem oferta acessível continuam sendo ignorados.
 
-Para reduzir falsos positivos, a coleta identifica o `domain_id` mais frequente nos resultados e mantém somente esse domínio. A saída mostra quantos produtos foram encontrados, filtrados e associados a ofertas.
+Para reduzir falsos positivos, a busca identifica o `domain_id` mais frequente nos resultados e mantém somente esse domínio. A categoria usada no ranking é a categoria mais frequente entre as ofertas válidas da busca.
 
 O MVP não depende de `/items/{item_id}`, pois esse recurso pode estar bloqueado para a aplicação. O permalink do anúncio permanece vazio até existir uma fonte oficial acessível para obtê-lo.
 
@@ -63,7 +82,9 @@ Eletrodomésticos
 
 Esta versão inclui somente a tabela normal para afiliados generalistas. A tabela de cupons personalizados foi deliberadamente deixada para uma fase posterior.
 
-As comissões direta e indireta são exibidas separadamente como estimativas calculadas sobre o preço coletado. Somente a comissão direta participa do score atual. A indireta permanece como indicador informativo, pois representa uma compra alternativa e não deve ser somada à direta como se ambas ocorressem na mesma venda.\n\nA elegibilidade da venda, a atribuição, eventuais ganhos extras, cancelamentos, impostos e o pagamento final dependem das regras e da validação do Programa de Afiliados e Criadores do Mercado Livre. A fonte registrada para as faixas é a página oficial [Quanto se ganha por venda](https://www.mercadolivre.com.br/ajuda/27913).
+As comissões direta e indireta são exibidas separadamente como estimativas calculadas sobre o preço coletado. Somente a comissão direta participa do score atual. A indireta permanece como indicador informativo, pois representa uma compra alternativa e não deve ser somada à direta como se ambas ocorressem na mesma venda.
+
+A elegibilidade da venda, a atribuição, eventuais ganhos extras, cancelamentos, impostos e o pagamento final dependem das regras e da validação do Programa de Afiliados e Criadores do Mercado Livre. A fonte registrada para as faixas é a página oficial [Quanto se ganha por venda](https://www.mercadolivre.com.br/ajuda/27913).
 
 ## Princípios
 
@@ -102,16 +123,7 @@ pip install -r requirements.txt
 
 ### 4. Criar o arquivo `.env`
 
-Copie `.env.example` para `.env` e informe o token oficial do Mercado Livre:
-
-```env
-MELI_ACCESS_TOKEN=seu_token_aqui
-MELI_SITE_ID=MLB
-MELI_QUERY=air fryer
-MELI_LIMIT=20
-```
-
-**Nunca faça commit do `.env`.** Ele já está no `.gitignore`.
+Copie `.env.example` para `.env` e informe as credenciais/tokens oficiais do Mercado Livre. **Nunca faça commit do `.env`.** Ele já está no `.gitignore`.
 
 ## Renovação automática do token
 
@@ -138,7 +150,6 @@ O resultado será salvo em `data/oportunidades.csv`.
 - validar periodicamente as taxas oficiais;
 - tratar cupons personalizados separadamente;
 - comparar ofertas concorrentes;
-- melhorar ranking de mais vendidos;
 - coletar reviews e reputação do vendedor;
 - histórico de preços, posições e avaliações;
 - geração de conteúdo, tracking de links e dashboard.
