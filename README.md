@@ -145,6 +145,44 @@ python -m app.main --query "air fryer" --limit 20
 
 O resultado será salvo em `data/oportunidades.csv`.
 
+## Interface web piloto
+
+A interface usa o mesmo pipeline do comando acima, roda localmente no PC e exige
+um usuário e uma senha simples definidos no `.env`. Ela não possui cadastro,
+recuperação de senha ou banco de usuários.
+
+### 1. Configurar o acesso
+
+Além das credenciais do Mercado Livre, preencha no `.env`:
+
+```dotenv
+WEB_USERNAME=seu_usuario
+WEB_PASSWORD=uma_senha_forte
+WEB_SECRET_KEY=uma_chave_aleatoria_longa
+WEB_HOST=127.0.0.1
+WEB_PORT=5000
+```
+
+`WEB_HOST=127.0.0.1` restringe o acesso ao próprio PC. Para um primeiro teste em
+outro aparelho da mesma rede, use `WEB_HOST=0.0.0.0` e acesse o endereço IP do PC.
+Não exponha este servidor diretamente à internet: esta autenticação é adequada
+somente para o piloto local.
+
+### 2. Iniciar a interface
+
+Com o ambiente virtual ativado e as dependências instaladas:
+
+```powershell
+python -m app.web
+```
+
+Abra [http://127.0.0.1:5000](http://127.0.0.1:5000), entre com os dados do `.env`
+e faça uma consulta por texto e limite (de 1 a 50 resultados iniciais).
+
+A tela mostra título, preço, score, posição entre os mais vendidos, comissões
+direta e indireta, link direto quando disponível, busca alternativa no Mercado
+Livre, resumo da coleta e tempo total.
+
 ## Próximas evoluções
 
 - validar periodicamente as taxas oficiais;

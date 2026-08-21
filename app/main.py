@@ -4,18 +4,11 @@ import argparse
 import csv
 import os
 import time
-from collections import Counter
-from datetime import datetime
 from pathlib import Path
-from typing import Any
-from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
-from .affiliate import estimate_commission, find_commission, load_rules
-from .collector import collect_ranked_products, normalize_item, search_items
-from .marketplace import category_path, get_category, get_category_best_sellers
-from .scoring import calculate_score
+from .service import collect_opportunities
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -46,23 +39,7 @@ def _format_duration(seconds: float) -> str:
     return f"{int(minutes)} min {remainder:.2f} s".replace(".", ",")
 
 
-def _marketplace_search_url(title: str | None) -> str | None:
-    """Fallback navegável quando a API não fornece permalink direto.
-
-    Este endereço é deliberadamente rotulado como busca, não como link direto
-    da oferta/produto, pois endpoints de itens de terceiros podem estar
-    bloqueados para a aplicação.
-    """
-    if not title:
-        return None
-    return f"https://lista.mercadolivre.com.br/{quote_plus(title)}"
-
-
 def main() -> None:
-    started_at = datetime.now().astimezone()
-    started_perf = time.perf_counter()
-    timings: dict[str, float] = {}
-
     load_dotenv()
 
     parser = argparse.ArgumentParser(description="Renda Afiliado ML - MVP")
@@ -71,102 +48,11 @@ def main() -> None:
     parser.add_argument("--site", default=os.getenv("MELI_SITE_ID", "MLB"))
     args = parser.parse_args()
 
-    stage = time.perf_counter()
-    collection_stats: dict[str, Any] = {}
-    raw_search_items = search_items(args.query, args.limit, args.site, collection_stats)
-    search_results = [normalize_item(item) for item in raw_search_items]
-    timings["busca_e_ofertas"] = time.perf_counter() - stage
-
-    rules = load_rules()
-    category_cache: dict[str, dict] = {}
-
-    def enrich_category(item: dict[str, Any]) -> None:
-        category_id = item.get("category_id")
-        if category_id:
-            if category_id not in category_cache:
-                category_cache[category_id] = get_category(category_id)
-            category = category_cache[category_id]
-            item["category_name"] = category.get("name")
-            item["category_path"] = category_path(category)
-        else:
-            item["category_name"] = None
-            item["category_path"] = None
-
-    stage = time.perf_counter()
-    for item in search_results:
-        enrich_category(item)
-    timings["categorias_busca"] = time.perf_counter() - stage
-
-    category_counts = Counter(
-        item.get("category_id") for item in search_results if item.get("category_id")
-    )
-    dominant_category_id = category_counts.most_common(1)[0][0] if category_counts else None
-
-    stage = time.perf_counter()
-    best_sellers: list[dict[str, Any]] = []
-    ranking_stats: dict[str, Any] = {}
-    if dominant_category_id:
-        best_sellers = get_category_best_sellers(dominant_category_id, args.site)
-    timings["ranking"] = time.perf_counter() - stage
-
-    ranking_map = {
-        entry.get("id"): entry.get("position")
-        for entry in best_sellers
-        if entry.get("type") == "PRODUCT" and entry.get("id")
-    }
-
-    existing_product_ids = {
-        item.get("catalog_product_id")
-        for item in search_results
-        if item.get("catalog_product_id")
-    }
-
-    stage = time.perf_counter()
-    raw_ranked_items = collect_ranked_products(
-        best_sellers,
-        query=args.query,
-        existing_product_ids=existing_product_ids,
-        stats=ranking_stats,
-    )
-    ranked_results = [normalize_item(item) for item in raw_ranked_items]
-    timings["ofertas_ranking"] = time.perf_counter() - stage
-
-    stage = time.perf_counter()
-    for item in ranked_results:
-        enrich_category(item)
-    timings["categorias_ranking"] = time.perf_counter() - stage
-
-    items = search_results + ranked_results
-
-    dominant_category_label = None
-    if dominant_category_id and dominant_category_id in category_cache:
-        dominant_category_label = category_path(category_cache[dominant_category_id])
-
-    stage = time.perf_counter()
-    for item in items:
-        product_id = item.get("catalog_product_id")
-        ranking_position = ranking_map.get(product_id)
-        if ranking_position:
-            item["best_seller_position"] = ranking_position
-            item["best_seller_category"] = dominant_category_id
-        else:
-            item["best_seller_position"] = None
-            item["best_seller_category"] = None
-
-        rule = find_commission(item.get("category_path") or "", rules)
-        item.update(estimate_commission(item.get("price"), rule))
-        item["commission_rule"] = rule.get("label") if rule else None
-
-        score, components = calculate_score(item, len(items))
-        item["marketplace_score"] = score
-        item["score_status"] = "provisório"
-        item["score_components"] = "; ".join(
-            f"{key}={value}" for key, value in components.items()
-        )
-        item["search_url"] = _marketplace_search_url(item.get("title"))
-
-    items.sort(key=lambda item: item["marketplace_score"], reverse=True)
-    timings["comissao_e_score"] = time.perf_counter() - stage
+    report = collect_opportunities(args.query, args.limit, args.site)
+    items = report["items"]
+    collection_stats = report["collection_stats"]
+    ranking_stats = report["ranking_stats"]
+    timings = report["timings"]
 
     stage = time.perf_counter()
     DATA_DIR.mkdir(exist_ok=True)
@@ -178,8 +64,9 @@ def main() -> None:
         writer.writerows(items)
     timings["csv"] = time.perf_counter() - stage
 
-    finished_at = datetime.now().astimezone()
-    elapsed = time.perf_counter() - started_perf
+    started_at = report["started_at"]
+    finished_at = report["finished_at"]
+    elapsed = report["elapsed_seconds"]
 
     print("RELATÓRIO DA COLETA")
     print(f"Data/hora início: {started_at.strftime('%d/%m/%Y %H:%M:%S %z')}")
@@ -201,14 +88,14 @@ def main() -> None:
         "Produtos da busca sem oferta acessível pela API: "
         f"{collection_stats.get('without_offer', 0)}"
     )
-    print(f"Ofertas válidas vindas da busca: {len(search_results)}")
+    print(f"Ofertas válidas vindas da busca: {report['search_results_count']}")
     print("  Via oferta vencedora: " f"{collection_stats.get('with_buy_box', 0)}")
     print(
         "  Via ofertas associadas ao produto: "
         f"{collection_stats.get('via_product_items', 0)}"
     )
-    print(f"Categoria usada no ranking: {dominant_category_label or 'n/d'}")
-    print(f"Produtos no TOP de mais vendidos da categoria: {len(ranking_map)}")
+    print(f"Categoria usada no ranking: {report['dominant_category_label'] or 'n/d'}")
+    print(f"Produtos no TOP de mais vendidos da categoria: {report['ranking_count']}")
     print(
         "  Já presentes entre as ofertas da busca: "
         f"{ranking_stats.get('ranking_duplicates', 0)}"
