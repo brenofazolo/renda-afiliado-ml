@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
 from .service import collect_opportunities
+from .marketplace import category_path, get_category, get_site_categories
 from .storage import (
     init_db,
     latest_search_run,
@@ -174,6 +175,8 @@ def create_app() -> Flask:
         search_mode = request.form.get("search_mode", restored_mode)
         if search_mode not in SEARCH_MODES:
             search_mode = "product"
+        restored_category_id = (latest or {}).get("report", {}).get("category_id", "")
+        category_id = request.form.get("category_id", restored_category_id).strip()
         try:
             default_limit = latest["limit"] if latest else os.getenv("MELI_LIMIT", "20")
             limit = max(1, min(int(request.form.get("limit", default_limit)), 50))
@@ -191,6 +194,7 @@ def create_app() -> Flask:
                         limit,
                         os.getenv("MELI_SITE_ID", "MLB"),
                         search_mode=search_mode,
+                        category_id=category_id or None,
                     )
                     save_search_run(query, limit, report)
                 except Exception as exc:  # mensagem operacional sem expor traceback no navegador
@@ -210,8 +214,35 @@ def create_app() -> Flask:
             search_mode=search_mode,
             search_modes=SEARCH_MODES,
             search_presets=SEARCH_PRESETS,
+            category_id=category_id,
             restored=bool(latest),
         )
+
+    @app.get("/categories")
+    @login_required
+    def categories() -> str:
+        selected_id = request.args.get("category_id", "").strip()
+        selected = None
+        error = None
+        try:
+            roots = get_site_categories(os.getenv("MELI_SITE_ID", "MLB"))
+            if selected_id:
+                selected = get_category(selected_id)
+        except Exception as exc:
+            roots = []
+            error = str(exc)
+        return render_template(
+            "categories.html",
+            roots=roots,
+            selected=selected,
+            selected_path=category_path(selected) if selected else None,
+            error=error,
+        )
+
+    @app.get("/help")
+    @login_required
+    def help_page() -> str:
+        return render_template("help.html")
 
     @app.post("/selection/save")
     @login_required

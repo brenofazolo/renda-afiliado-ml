@@ -224,6 +224,18 @@ uma segunda rodada automática com subconsultas relacionadas. Por exemplo,
 serras elétricas e chaves de impacto. O resumo informa quais variações foram
 tentadas e quantos resultados adicionais foram aproveitados.
 
+## Ajuda e árvore de categorias
+
+O menu **Ajuda** apresenta o fluxo operacional do piloto em linguagem simples:
+descoberta, avaliação, aprovação, geração do link oficial, publicação e
+encerramento seguro da sessão.
+
+O menu **Categorias** navega pela árvore oficial do site configurado. É possível
+filtrar os nós por nome, avançar por raiz e subcategorias e consultar exatamente
+o nó selecionado. Nesse fluxo, o backend envia o `category_id` oficial ao recurso
+de mais vendidos e não utiliza a pesquisa textual como substituto da categoria.
+Categorias sem ranking oficial podem retornar uma lista vazia.
+
 No modo **Marca**, o backend confirma a marca pelo atributo oficial `BRAND` do
 catálogo e usa o título apenas quando esse atributo não estiver disponível. Os
 itens de outras marcas encontrados na busca ou no ranking da categoria são

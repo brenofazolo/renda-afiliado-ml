@@ -68,6 +68,25 @@ class BrandDiscoveryTest(unittest.TestCase):
         self.assertIn("jogo de ferramentas", broad_query_expansions("ferramentas"))
         self.assertIn("perfume feminino", broad_query_expansions("Perfumes"))
 
+    def test_exact_category_uses_official_ranking_instead_of_text_search(self) -> None:
+        category = {
+            "id": "MLB1",
+            "name": "Ferramentas",
+            "path_from_root": [{"id": "MLB1", "name": "Ferramentas"}],
+        }
+        with (
+            patch("app.service.get_category", return_value=category),
+            patch("app.service.get_category_best_sellers", return_value=[]) as ranking,
+            patch("app.service.search_items") as text_search,
+        ):
+            report = collect_opportunities(
+                "Ferramentas", 20, "MLB", search_mode="category", category_id="MLB1"
+            )
+        text_search.assert_not_called()
+        ranking.assert_called_once_with("MLB1", "MLB")
+        self.assertEqual(report["category_id"], "MLB1")
+        self.assertEqual(report["selected_category_label"], "Ferramentas")
+
 
 if __name__ == "__main__":
     unittest.main()

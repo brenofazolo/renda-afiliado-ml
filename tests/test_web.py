@@ -117,8 +117,32 @@ class WebWorkflowTest(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
         collect.assert_called_once_with(
-            "beleza e autocuidado", 12, "MLB", search_mode="niche"
+            "beleza e autocuidado", 12, "MLB", search_mode="niche", category_id=None
         )
+
+    def test_help_and_category_tree_pages(self) -> None:
+        help_page = self.client.get("/help")
+        self.assertEqual(help_page.status_code, 200)
+        self.assertIn("Como trabalhar com a ferramenta".encode(), help_page.data)
+        with (
+            patch(
+                "app.web.get_site_categories",
+                return_value=[{"id": "MLB1", "name": "Ferramentas"}],
+            ),
+            patch(
+                "app.web.get_category",
+                return_value={
+                    "id": "MLB1",
+                    "name": "Ferramentas",
+                    "path_from_root": [{"id": "MLB1", "name": "Ferramentas"}],
+                    "children_categories": [{"id": "MLB2", "name": "Ferramentas elétricas"}],
+                },
+            ),
+        ):
+            page = self.client.get("/categories?category_id=MLB1")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Consultar esta categoria".encode(), page.data)
+        self.assertIn("Ferramentas elétricas".encode(), page.data)
 
     def test_active_login_redirects_and_idle_session_expires(self) -> None:
         self.assertEqual(self.client.get("/login").status_code, 302)

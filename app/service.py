@@ -109,6 +109,7 @@ def collect_opportunities(
     limit: int = 20,
     site_id: str = "MLB",
     search_mode: str = "product",
+    category_id: str | None = None,
 ) -> dict[str, Any]:
     """Executa o pipeline do MVP e retorna resultados e diagnóstico da coleta."""
     started_at = datetime.now().astimezone()
@@ -117,14 +118,22 @@ def collect_opportunities(
 
     stage = time.perf_counter()
     collection_stats: dict[str, Any] = {}
-    broad_discovery = search_mode in {"category", "niche"}
-    raw_search_items = search_items(
-        query,
-        limit,
-        site_id,
-        collection_stats,
+    selected_category = get_category(category_id) if category_id else None
+    broad_discovery = search_mode in {"category", "niche"} and not category_id
+    raw_search_items = [] if category_id else search_items(
+        query, limit, site_id, collection_stats,
         restrict_to_dominant_domain=not broad_discovery,
     )
+    if category_id:
+        collection_stats.update(
+            products_found=0,
+            dominant_domain=None,
+            filtered_by_domain=0,
+            with_buy_box=0,
+            via_product_items=0,
+            without_offer=0,
+            analyzed=0,
+        )
     search_results = [normalize_item(item) for item in raw_search_items]
     fallback_queries: list[str] = []
     fallback_added = 0
@@ -174,6 +183,8 @@ def collect_opportunities(
 
     rules = load_rules()
     category_cache: dict[str, dict] = {}
+    if category_id and selected_category:
+        category_cache[category_id] = selected_category
 
     def enrich_category(item: dict[str, Any]) -> None:
         category_id = item.get("category_id")
@@ -195,13 +206,17 @@ def collect_opportunities(
     category_counts = Counter(
         item.get("category_id") for item in search_results if item.get("category_id")
     )
-    dominant_category_id = category_counts.most_common(1)[0][0] if category_counts else None
+    dominant_category_id = category_id or (
+        category_counts.most_common(1)[0][0] if category_counts else None
+    )
 
     stage = time.perf_counter()
     best_sellers: list[dict[str, Any]] = []
     ranking_stats: dict[str, Any] = {}
     if dominant_category_id and not broad_discovery:
         best_sellers = get_category_best_sellers(dominant_category_id, site_id)
+        if category_id:
+            collection_stats["products_found"] = len(best_sellers)
     timings["ranking"] = time.perf_counter() - stage
 
     ranking_map = {
@@ -263,6 +278,8 @@ def collect_opportunities(
     return {
         "query": query,
         "search_mode": search_mode,
+        "category_id": category_id,
+        "selected_category_label": category_path(selected_category) if selected_category else None,
         "limit": limit,
         "site_id": site_id,
         "items": items,

@@ -8,6 +8,17 @@ from .token_manager import meli_request
 BASE_URL = "https://api.mercadolibre.com"
 
 
+def get_site_categories(site_id: str = "MLB") -> list[dict[str, Any]]:
+    """Retorna as categorias raiz oficiais do site."""
+    response = meli_request(
+        "GET",
+        f"{BASE_URL}/sites/{quote_plus(site_id)}/categories",
+        timeout=20,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def get_category(category_id: str) -> dict[str, Any]:
     response = meli_request(
         "GET",
@@ -42,6 +53,8 @@ def get_category_best_sellers(category_id: str, site_id: str = "MLB") -> list[di
         f"{BASE_URL}/highlights/{site_id}/category/{quote_plus(category_id)}",
         timeout=20,
     )
+    if response.status_code == 404:
+        return []
     response.raise_for_status()
     return response.json().get("content", [])
 
