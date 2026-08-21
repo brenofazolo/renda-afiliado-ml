@@ -44,7 +44,10 @@ def _build_item(
     item["catalog_product_id"] = product_id
     item["domain_id"] = product.get("domain_id") or detail.get("domain_id")
     item["offer_source"] = offer_source
-    item["permalink"] = detail.get("permalink")
+    # O detalhe do produto normalmente traz a página de catálogo. Algumas
+    # respostas de oferta também podem trazer um permalink mais específico;
+    # preserve-o quando o detalhe não fornecer um endereço.
+    item["permalink"] = detail.get("permalink") or offer.get("permalink")
     item["pictures"] = detail.get("pictures") or []
     first_picture = next(iter(item["pictures"]), {})
     item["thumbnail"] = first_picture.get("secure_url") or first_picture.get("url")

@@ -183,6 +183,11 @@ A tela mostra título, preço, score, posição entre os mais vendidos, comissõ
 direta e indireta, link direto quando disponível, busca alternativa no Mercado
 Livre, resumo da coleta e tempo total.
 
+Quando a API não fornece um permalink, a interface monta a rota oficial da
+página do produto de catálogo usando seu identificador. A busca por título
+continua disponível como alternativa. Esses endereços levam ao Mercado Livre;
+a geração do link de afiliado permanece no fluxo oficial da conta.
+
 ## Próximas evoluções
 
 - validar periodicamente as taxas oficiais;

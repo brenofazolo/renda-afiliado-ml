@@ -18,6 +18,21 @@ def marketplace_search_url(title: str | None) -> str | None:
     return f"https://lista.mercadolivre.com.br/{quote_plus(title)}"
 
 
+def catalog_product_url(product_id: str | None, site_id: str = "MLB") -> str | None:
+    """Monta a rota oficial da página de produto quando a API omite permalink."""
+    if not product_id:
+        return None
+    domains = {
+        "MLB": "www.mercadolivre.com.br",
+        "MLA": "www.mercadolibre.com.ar",
+        "MLM": "www.mercadolibre.com.mx",
+    }
+    domain = domains.get(site_id)
+    if not domain:
+        return None
+    return f"https://{domain}/p/{quote_plus(product_id)}"
+
+
 def collect_opportunities(query: str, limit: int = 20, site_id: str = "MLB") -> dict[str, Any]:
     """Executa o pipeline do MVP e retorna resultados e diagnóstico da coleta."""
     started_at = datetime.now().astimezone()
@@ -108,6 +123,9 @@ def collect_opportunities(query: str, limit: int = 20, site_id: str = "MLB") -> 
             f"{key}={value}" for key, value in components.items()
         )
         item["search_url"] = marketplace_search_url(item.get("title"))
+        item["catalog_url"] = catalog_product_url(
+            item.get("catalog_product_id"), site_id
+        )
     items.sort(key=lambda item: item["marketplace_score"], reverse=True)
     timings["comissao_e_score"] = time.perf_counter() - stage
 
