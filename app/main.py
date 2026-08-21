@@ -29,6 +29,12 @@ def _format_score(value: float | int) -> str:
     return f"{value:.2f}".replace(".", ",")
 
 
+def _format_percent(value: float | int | None) -> str:
+    if value is None:
+        return "n/d"
+    return f"{value:g}%".replace(".", ",")
+
+
 def main() -> None:
     load_dotenv()
 
@@ -63,7 +69,7 @@ def main() -> None:
 
         rule = find_commission(item.get("category_path") or "", rules)
         item.update(estimate_commission(item.get("price"), rule))
-        item["commission_rule"] = rule.get("match") if rule else None
+        item["commission_rule"] = rule.get("label") if rule else None
 
         score, components = calculate_score(item, len(items))
         item["marketplace_score"] = score
@@ -113,9 +119,17 @@ def main() -> None:
     for index, item in enumerate(items[:10], start=1):
         print(
             f"{index:02d}. Score: {_format_score(item['marketplace_score'])} | "
-            f"Preço: {_format_brl(item.get('price'))} | "
-            f"Comissão: {_format_brl(item.get('affiliate_direct_value'))} | "
-            f"{item['title']}"
+            f"Preço: {_format_brl(item.get('price'))} | {item['title']}"
+        )
+        print(
+            "    Comissão direta: "
+            f"{_format_percent(item.get('affiliate_direct_percent'))} | "
+            f"{_format_brl(item.get('affiliate_direct_value'))}"
+        )
+        print(
+            "    Comissão indireta (informativa): "
+            f"{_format_percent(item.get('affiliate_indirect_percent'))} | "
+            f"{_format_brl(item.get('affiliate_indirect_value'))}"
         )
 
 

@@ -1,19 +1,13 @@
 from __future__ import annotations
 
-import os
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote_plus
 
-import requests
+from .token_manager import meli_request
 
 BASE_URL = "https://api.mercadolibre.com"
-
-
-def _headers() -> dict[str, str]:
-    token = os.getenv("MELI_ACCESS_TOKEN", "").strip()
-    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def search_items(
@@ -24,10 +18,10 @@ def search_items(
 ) -> list[dict[str, Any]]:
     """Busca produtos de catálogo e devolve uma oferta concreta de cada produto."""
     limit = max(1, min(limit, 50))
-    response = requests.get(
+    response = meli_request(
+        "GET",
         f"{BASE_URL}/products/search",
         params={"status": "active", "site_id": site_id, "q": query, "limit": limit},
-        headers=_headers(),
         timeout=20,
     )
     response.raise_for_status()
@@ -103,9 +97,9 @@ def search_items(
 
 def get_product(product_id: str) -> dict[str, Any]:
     """Consulta o detalhe de um produto de catálogo."""
-    response = requests.get(
+    response = meli_request(
+        "GET",
         f"{BASE_URL}/products/{quote_plus(product_id)}",
-        headers=_headers(),
         timeout=20,
     )
     response.raise_for_status()
@@ -118,9 +112,9 @@ def get_product_items(product_id: str) -> list[dict[str, Any]]:
     A API pode retornar 404 para produtos ativos que não possuem publicações
     consultáveis. Nesse caso, o produto é ignorado e a coleta continua.
     """
-    response = requests.get(
+    response = meli_request(
+        "GET",
         f"{BASE_URL}/products/{quote_plus(product_id)}/items",
-        headers=_headers(),
         timeout=20,
     )
     if response.status_code == 404:

@@ -13,22 +13,30 @@ def load_rules() -> list[dict[str, Any]]:
         return json.load(file).get("rules", [])
 
 
-def find_commission(category_path: str, rules: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Procura uma regra por trecho da hierarquia da categoria.
+def find_commission(
+    category_path: str,
+    rules: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Procura uma regra pela categoria raiz da hierarquia oficial."""
+    root_category = category_path.split(">", maxsplit=1)[0].casefold().strip()
+    if not root_category:
+        return None
 
-    Exemplo de regra futura:
-    {"match": "Beleza", "direct_percent": 16, "indirect_percent": 8}
-    """
-    normalized_path = category_path.casefold()
     for rule in rules:
-        match = str(rule.get("match", "")).casefold().strip()
-        if match and match in normalized_path:
+        matches = rule.get("matches") or [rule.get("match")]
+        normalized_matches = {
+            str(match).casefold().strip() for match in matches if match
+        }
+        if root_category in normalized_matches:
             return rule
     return None
 
 
-def estimate_commission(price: float | None, rule: dict[str, Any] | None) -> dict[str, float | None]:
-    if not price or not rule:
+def estimate_commission(
+    price: float | None,
+    rule: dict[str, Any] | None,
+) -> dict[str, float | None]:
+    if price is None or not rule:
         return {
             "affiliate_direct_percent": None,
             "affiliate_indirect_percent": None,
