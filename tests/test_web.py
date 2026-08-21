@@ -55,6 +55,7 @@ class WebWorkflowTest(unittest.TestCase):
                 "price": "99.90",
                 "marketplace_score": "88.2",
                 "best_seller_position": "2",
+                "official_store_id": "123",
                 "affiliate_direct_value": "12",
                 "affiliate_indirect_value": "6",
                 "product_url": "https://example.com/p",
@@ -66,7 +67,9 @@ class WebWorkflowTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         rows = list_selections()
         self.assertEqual(rows[0]["title"], "Produto teste")
-        self.assertIn(b"Produto teste", self.client.get("/selections").data)
+        page = self.client.get("/selections")
+        self.assertIn(b"Produto teste", page.data)
+        self.assertIn(b"Loja oficial", page.data)
 
         response = self.client.post(
             f"/selections/{rows[0]['id']}/update",
@@ -79,6 +82,9 @@ class WebWorkflowTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(list_selections()[0]["publication_status"], "published")
+        updated_page = self.client.get("/selections")
+        self.assertIn(b"Publicado", updated_page.data)
+        self.assertIn(b"Abrir link de afiliado", updated_page.data)
 
 
 if __name__ == "__main__":

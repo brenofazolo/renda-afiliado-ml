@@ -8,7 +8,7 @@ from functools import wraps
 from typing import Any, Callable
 
 from dotenv import load_dotenv
-from flask import Flask, Response, abort, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
 from .service import collect_opportunities
 from .storage import init_db, list_selections, save_selection, update_selection
@@ -63,6 +63,26 @@ def create_app() -> Flask:
             return f"{seconds:.2f} s".replace(".", ",")
         minutes, remainder = divmod(seconds, 60)
         return f"{int(minutes)} min {remainder:.2f} s".replace(".", ",")
+
+    @app.template_filter("status_label")
+    def status_label(value: str | None) -> str:
+        return {
+            "selected": "Selecionado",
+            "link_created": "Link gerado",
+            "published": "Publicado",
+            "closed": "Encerrado",
+        }.get(value or "", value or "n/d")
+
+    @app.template_filter("date_br")
+    def date_br(value: str | None) -> str:
+        if not value:
+            return "n/d"
+        try:
+            from datetime import datetime
+
+            return datetime.fromisoformat(value).astimezone().strftime("%d/%m/%Y %H:%M")
+        except ValueError:
+            return value
 
     @app.route("/login", methods=["GET", "POST"])
     def login() -> str | Response:
@@ -124,10 +144,12 @@ def create_app() -> Flask:
                 "price": number("price"),
                 "marketplace_score": number("marketplace_score"),
                 "best_seller_position": number("best_seller_position"),
+                "official_store_id": number("official_store_id"),
                 "affiliate_direct_value": number("affiliate_direct_value"),
                 "affiliate_indirect_value": number("affiliate_indirect_value"),
             }
         )
+        flash("Produto registrado com sucesso.", "success")
         return redirect(url_for("selections", decision=request.form.get("decision", "approved")))
 
     @app.get("/selections")
@@ -144,6 +166,7 @@ def create_app() -> Flask:
     @login_required
     def selection_update(selection_id: int) -> Response:
         update_selection(selection_id, dict(request.form))
+        flash("Alterações salvas com sucesso.", "success")
         return redirect(url_for("selections"))
 
     return app

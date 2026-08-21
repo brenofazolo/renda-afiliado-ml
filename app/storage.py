@@ -35,6 +35,7 @@ def init_db() -> None:
                 price REAL,
                 marketplace_score REAL,
                 best_seller_position INTEGER,
+                official_store_id INTEGER,
                 affiliate_direct_value REAL,
                 affiliate_indirect_value REAL,
                 product_url TEXT,
@@ -50,6 +51,13 @@ def init_db() -> None:
             )
             """
         )
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(selections)").fetchall()
+        }
+        if "official_store_id" not in columns:
+            connection.execute(
+                "ALTER TABLE selections ADD COLUMN official_store_id INTEGER"
+            )
 
 
 def save_selection(values: dict[str, Any]) -> None:
@@ -62,6 +70,7 @@ def save_selection(values: dict[str, Any]) -> None:
         "price": values.get("price"),
         "marketplace_score": values.get("marketplace_score"),
         "best_seller_position": values.get("best_seller_position"),
+        "official_store_id": values.get("official_store_id"),
         "affiliate_direct_value": values.get("affiliate_direct_value"),
         "affiliate_indirect_value": values.get("affiliate_indirect_value"),
         "product_url": values.get("product_url"),
@@ -76,12 +85,12 @@ def save_selection(values: dict[str, Any]) -> None:
             """
             INSERT INTO selections (
                 catalog_product_id, item_id, title, thumbnail, price,
-                marketplace_score, best_seller_position, affiliate_direct_value,
+                marketplace_score, best_seller_position, official_store_id, affiliate_direct_value,
                 affiliate_indirect_value, product_url, search_url, query, decision,
                 discard_reason, notes, created_at, updated_at
             ) VALUES (
                 :catalog_product_id, :item_id, :title, :thumbnail, :price,
-                :marketplace_score, :best_seller_position, :affiliate_direct_value,
+                :marketplace_score, :best_seller_position, :official_store_id, :affiliate_direct_value,
                 :affiliate_indirect_value, :product_url, :search_url, :query, :decision,
                 :discard_reason, :notes, :created_at, :updated_at
             )
@@ -92,6 +101,7 @@ def save_selection(values: dict[str, Any]) -> None:
                 price=excluded.price,
                 marketplace_score=excluded.marketplace_score,
                 best_seller_position=excluded.best_seller_position,
+                official_store_id=excluded.official_store_id,
                 product_url=excluded.product_url,
                 thumbnail=excluded.thumbnail,
                 updated_at=excluded.updated_at
