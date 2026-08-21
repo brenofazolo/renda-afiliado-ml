@@ -42,7 +42,10 @@ def _build_item(
     item["catalog_product_id"] = product_id
     item["domain_id"] = product.get("domain_id") or detail.get("domain_id")
     item["offer_source"] = offer_source
-    item["permalink"] = None
+    # /items/{item_id} pode estar bloqueado para a aplicação atual. O detalhe
+    # do produto de catálogo, porém, expõe um permalink público estável que
+    # permite ao usuário abrir a página do produto no Mercado Livre.
+    item["permalink"] = detail.get("permalink")
     item["pictures"] = detail.get("pictures") or []
     first_picture = next(iter(item["pictures"]), {})
     item["thumbnail"] = first_picture.get("secure_url") or first_picture.get("url")
