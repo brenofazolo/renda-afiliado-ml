@@ -217,6 +217,17 @@ página do produto de catálogo usando seu identificador. A busca por título
 continua disponível como alternativa. Esses endereços levam ao Mercado Livre;
 a geração do link de afiliado permanece no fluxo oficial da conta.
 
+## Preços e promoções
+
+Quando existe `item_id`, o coletor tenta consultar o preço público vigente em
+`/items/{item_id}/sale_price` para o canal marketplace. Promoções públicas
+confirmadas pela API passam a ser usadas no score e nas estimativas de comissão,
+com o preço padrão exibido separadamente. Se o recurso estiver indisponível, o
+fluxo mantém o preço da oferta de catálogo.
+
+Benefícios condicionados à conta do comprador, saldo ou meio de pagamento não
+entram automaticamente no cálculo, pois podem não estar disponíveis para todos.
+
 ## Próximas evoluções
 
 - validar periodicamente as taxas oficiais;

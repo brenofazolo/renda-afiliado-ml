@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote_plus
 
+import requests
+
 from .token_manager import meli_request
 
 BASE_URL = "https://api.mercadolibre.com"
@@ -17,14 +19,30 @@ def _offer_for_product(product_id: str) -> tuple[dict[str, Any] | None, dict[str
     detail = get_product(product_id)
     offer = detail.get("buy_box_winner")
     if offer:
-        return offer, detail, "buy_box_winner"
+        return _with_sale_price(offer), detail, "buy_box_winner"
 
     related_items = get_product_items(product_id)
     offer = next(iter(related_items), None)
     if offer:
-        return offer, detail, "product_items"
+        return _with_sale_price(offer), detail, "product_items"
 
     return None, detail, None
+
+
+def _with_sale_price(offer: dict[str, Any]) -> dict[str, Any]:
+    """Anexa o preço público vigente sem impedir a coleta em caso de bloqueio."""
+    enriched = dict(offer)
+    item_id = offer.get("item_id") or offer.get("id")
+    enriched["_offer_price"] = offer.get("price")
+    if not item_id:
+        return enriched
+    sale_price = get_item_sale_price(str(item_id))
+    if sale_price:
+        enriched["_sale_price_amount"] = sale_price.get("amount")
+        enriched["_sale_price_regular_amount"] = sale_price.get("regular_amount")
+        enriched["_sale_price_currency"] = sale_price.get("currency_id")
+        enriched["_sale_price_reference_date"] = sale_price.get("reference_date")
+    return enriched
 
 
 def _build_item(
@@ -259,11 +277,40 @@ def get_product_items(product_id: str) -> list[dict[str, Any]]:
     return response.json().get("results", [])
 
 
+def get_item_sale_price(item_id: str) -> dict[str, Any] | None:
+    """Consulta o preço público vencedor no canal marketplace.
+
+    Alguns tokens não têm acesso a preços de itens de terceiros. Nesses casos,
+    a coleta continua com o preço já presente na oferta do catálogo.
+    """
+    try:
+        response = meli_request(
+            "GET",
+            f"{BASE_URL}/items/{quote_plus(item_id)}/sale_price",
+            params={"context": "channel_marketplace"},
+            timeout=20,
+        )
+    except requests.RequestException:
+        return None
+    if not response.ok:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
 def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
     """Extrai somente os campos úteis para o MVP."""
     shipping = item.get("shipping") or {}
+    offer_price = item.get("_offer_price", item.get("price"))
+    sale_price = item.get("_sale_price_amount")
+    sale_regular_price = item.get("_sale_price_regular_amount")
+    price = sale_price if sale_price is not None else offer_price
+    standard_price = sale_regular_price or offer_price
     original_price = item.get("original_price")
-    price = item.get("price")
+    if standard_price and price and standard_price > price:
+        original_price = standard_price
 
     discount = None
     if original_price and price and original_price > price:
@@ -281,6 +328,10 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         "category_id": item.get("category_id"),
         "seller_id": item.get("seller_id"),
         "price": price,
+        "standard_price": standard_price,
+        "promotional_price": price if standard_price and price and price < standard_price else None,
+        "price_source": "sale_price_api" if sale_price is not None else "catalog_offer",
+        "price_reference_date": item.get("_sale_price_reference_date"),
         "original_price": original_price,
         "discount_percent": discount,
         "currency": item.get("currency_id"),

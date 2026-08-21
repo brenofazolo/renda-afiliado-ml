@@ -168,6 +168,8 @@ def create_app() -> Flask:
                 **request.form,
                 "catalog_product_id": product_id,
                 "price": number("price"),
+                "standard_price": number("standard_price"),
+                "promotional_price": number("promotional_price"),
                 "marketplace_score": number("marketplace_score"),
                 "best_seller_position": number("best_seller_position"),
                 "official_store_id": number("official_store_id"),

@@ -34,6 +34,9 @@ def init_db() -> None:
                 title TEXT NOT NULL,
                 thumbnail TEXT,
                 price REAL,
+                standard_price REAL,
+                promotional_price REAL,
+                price_source TEXT,
                 marketplace_score REAL,
                 best_seller_position INTEGER,
                 official_store_id INTEGER,
@@ -55,10 +58,17 @@ def init_db() -> None:
         columns = {
             row[1] for row in connection.execute("PRAGMA table_info(selections)").fetchall()
         }
-        if "official_store_id" not in columns:
-            connection.execute(
-                "ALTER TABLE selections ADD COLUMN official_store_id INTEGER"
-            )
+        migrations = {
+            "official_store_id": "INTEGER",
+            "standard_price": "REAL",
+            "promotional_price": "REAL",
+            "price_source": "TEXT",
+        }
+        for column, column_type in migrations.items():
+            if column not in columns:
+                connection.execute(
+                    f"ALTER TABLE selections ADD COLUMN {column} {column_type}"
+                )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS search_runs (
@@ -80,6 +90,9 @@ def save_selection(values: dict[str, Any]) -> None:
         "title": values.get("title") or "Produto sem título",
         "thumbnail": values.get("thumbnail"),
         "price": values.get("price"),
+        "standard_price": values.get("standard_price"),
+        "promotional_price": values.get("promotional_price"),
+        "price_source": values.get("price_source"),
         "marketplace_score": values.get("marketplace_score"),
         "best_seller_position": values.get("best_seller_position"),
         "official_store_id": values.get("official_store_id"),
@@ -96,12 +109,14 @@ def save_selection(values: dict[str, Any]) -> None:
         connection.execute(
             """
             INSERT INTO selections (
-                catalog_product_id, item_id, title, thumbnail, price,
+                catalog_product_id, item_id, title, thumbnail, price, standard_price,
+                promotional_price, price_source,
                 marketplace_score, best_seller_position, official_store_id, affiliate_direct_value,
                 affiliate_indirect_value, product_url, search_url, query, decision,
                 discard_reason, notes, created_at, updated_at
             ) VALUES (
-                :catalog_product_id, :item_id, :title, :thumbnail, :price,
+                :catalog_product_id, :item_id, :title, :thumbnail, :price, :standard_price,
+                :promotional_price, :price_source,
                 :marketplace_score, :best_seller_position, :official_store_id, :affiliate_direct_value,
                 :affiliate_indirect_value, :product_url, :search_url, :query, :decision,
                 :discard_reason, :notes, :created_at, :updated_at
@@ -111,6 +126,9 @@ def save_selection(values: dict[str, Any]) -> None:
                 discard_reason=excluded.discard_reason,
                 notes=COALESCE(excluded.notes, selections.notes),
                 price=excluded.price,
+                standard_price=excluded.standard_price,
+                promotional_price=excluded.promotional_price,
+                price_source=excluded.price_source,
                 marketplace_score=excluded.marketplace_score,
                 best_seller_position=excluded.best_seller_position,
                 official_store_id=excluded.official_store_id,
