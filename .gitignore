@@ -10,3 +10,6 @@ __pycache__/
 # Dados gerados localmente
 data/*.csv
 data/*.json
+data/*.db
+data/*.db-shm
+data/*.db-wal

@@ -3,13 +3,15 @@ from __future__ import annotations
 import hmac
 import os
 import secrets
+from datetime import timedelta
 from functools import wraps
 from typing import Any, Callable
 
 from dotenv import load_dotenv
-from flask import Flask, Response, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, redirect, render_template, request, session, url_for
 
 from .service import collect_opportunities
+from .storage import init_db, list_selections, save_selection, update_selection
 
 load_dotenv()
 
@@ -17,6 +19,27 @@ load_dotenv()
 def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = os.getenv("WEB_SECRET_KEY") or secrets.token_hex(32)
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.getenv("WEB_HTTPS_ONLY", "false").lower() == "true",
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+    )
+    init_db()
+
+    @app.context_processor
+    def inject_csrf_token() -> dict[str, Any]:
+        if "csrf_token" not in session:
+            session["csrf_token"] = secrets.token_urlsafe(32)
+        return {"csrf_token": session["csrf_token"]}
+
+    @app.before_request
+    def protect_posts() -> None:
+        if request.method == "POST":
+            provided = request.form.get("csrf_token", "")
+            expected = session.get("csrf_token", "")
+            if not provided or not expected or not hmac.compare_digest(provided, expected):
+                abort(400)
 
     def login_required(view: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(view)
@@ -51,6 +74,7 @@ def create_app() -> Flask:
             password = request.form.get("password", "")
             if expected_user and expected_password and hmac.compare_digest(username, expected_user) and hmac.compare_digest(password, expected_password):
                 session["authenticated"] = True
+                session.permanent = True
                 return redirect(url_for("index"))
             error = "Usuário ou senha inválidos."
         return render_template("login.html", error=error)
@@ -79,6 +103,48 @@ def create_app() -> Flask:
                 except Exception as exc:  # mensagem operacional sem expor traceback no navegador
                     error = str(exc)
         return render_template("index.html", query=query, limit=limit, report=report, error=error)
+
+    @app.post("/selection/save")
+    @login_required
+    def selection_save() -> Response:
+        product_id = request.form.get("catalog_product_id", "").strip()
+        if not product_id:
+            abort(400)
+
+        def number(name: str) -> float | None:
+            try:
+                return float(request.form[name]) if request.form.get(name) else None
+            except ValueError:
+                return None
+
+        save_selection(
+            {
+                **request.form,
+                "catalog_product_id": product_id,
+                "price": number("price"),
+                "marketplace_score": number("marketplace_score"),
+                "best_seller_position": number("best_seller_position"),
+                "affiliate_direct_value": number("affiliate_direct_value"),
+                "affiliate_indirect_value": number("affiliate_indirect_value"),
+            }
+        )
+        return redirect(url_for("selections", decision=request.form.get("decision", "approved")))
+
+    @app.get("/selections")
+    @login_required
+    def selections() -> str:
+        decision = request.args.get("decision", "approved")
+        if decision not in {"approved", "discarded"}:
+            decision = "approved"
+        return render_template(
+            "selections.html", selections=list_selections(decision), decision=decision
+        )
+
+    @app.post("/selections/<int:selection_id>/update")
+    @login_required
+    def selection_update(selection_id: int) -> Response:
+        update_selection(selection_id, dict(request.form))
+        return redirect(url_for("selections"))
 
     return app
 

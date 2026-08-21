@@ -183,6 +183,27 @@ A tela mostra título, preço, score, posição entre os mais vendidos, comissõ
 direta e indireta, link direto quando disponível, busca alternativa no Mercado
 Livre, resumo da coleta e tempo total.
 
+Para a operação diária, prefira o servidor Waitress, compatível com Windows:
+
+```powershell
+python -m app.run_server
+```
+
+## Shortlist operacional
+
+Cada oportunidade pode ser aprovada ou descartada. Os aprovados aparecem em
+**Minha seleção**, onde é possível registrar observações, link de afiliado e o
+estado da publicação. Os dados ficam no SQLite local `data/pilot.db`, que não é
+versionado pelo Git.
+
+## Acesso remoto seguro
+
+Não abra a porta 5000 diretamente no roteador. Para acesso externo, use um
+túnel HTTPS com controle de acesso, apontando para `http://127.0.0.1:5000`.
+Quando o endereço HTTPS estiver configurado, use `WEB_HTTPS_ONLY=true` no `.env`
+para que o cookie de sessão seja enviado somente por HTTPS. O computador precisa
+permanecer ligado, com Waitress e o conector do túnel em execução.
+
 A interface utiliza a identidade visual da LANCES TECH, com logo horizontal
 adaptada para web e paleta baseada em azul-marinho, magenta, branco e prata.
 
