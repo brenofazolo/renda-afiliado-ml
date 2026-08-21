@@ -113,6 +113,18 @@ MELI_LIMIT=20
 
 **Nunca faça commit do `.env`.** Ele já está no `.gitignore`.
 
+## Renovação automática do token
+
+Todas as chamadas do MVP passam por `app/token_manager.py`. Quando a validade registrada estiver próxima do fim, ou quando uma chamada retornar `401`, o módulo:
+
+1. envia o `MELI_REFRESH_TOKEN` para `/oauth/token`;
+2. recebe um novo access token e um novo refresh token;
+3. substitui os dois juntos no `.env`;
+4. registra `MELI_TOKEN_EXPIRES_AT`;
+5. repete a chamada original uma única vez.
+
+O Mercado Livre permite usar somente o refresh token mais recente. Por isso, os dois tokens são persistidos juntos e nunca impressos no terminal. Em caso de `invalid_grant`, revogação ou expiração do refresh token, será necessária uma nova autorização manual.
+
 ### 5. Executar o teste
 
 ```powershell
