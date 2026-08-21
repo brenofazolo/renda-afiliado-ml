@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import time
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +38,17 @@ def _format_percent(value: float | int | None) -> str:
     return f"{value:g}%".replace(".", ",")
 
 
+def _format_duration(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.2f} s".replace(".", ",")
+    minutes, remainder = divmod(seconds, 60)
+    return f"{int(minutes)} min {remainder:.2f} s".replace(".", ",")
+
+
 def main() -> None:
+    started_at = datetime.now().astimezone()
+    started_perf = time.perf_counter()
+
     load_dotenv()
 
     parser = argparse.ArgumentParser(description="Renda Afiliado ML - MVP")
@@ -135,7 +147,13 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(items)
 
+    finished_at = datetime.now().astimezone()
+    elapsed = time.perf_counter() - started_perf
+
     print("RELATÓRIO DA COLETA")
+    print(f"Data/hora início: {started_at.strftime('%d/%m/%Y %H:%M:%S %z')}")
+    print(f"Data/hora fim: {finished_at.strftime('%d/%m/%Y %H:%M:%S %z')}")
+    print(f"Tempo total de execução: {_format_duration(elapsed)}")
     print(f"Consulta: {args.query}")
     print(f"Resultados da busca: {collection_stats.get('products_found', 0)}")
     print(f"Domínio identificado: {collection_stats.get('dominant_domain') or 'n/d'}")
@@ -198,6 +216,7 @@ def main() -> None:
             f"{_format_percent(item.get('affiliate_indirect_percent'))} | "
             f"{_format_brl(item.get('affiliate_indirect_value'))}"
         )
+        print(f"    Link do produto: {item.get('permalink') or 'n/d'}")
 
 
 if __name__ == "__main__":
