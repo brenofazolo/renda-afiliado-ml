@@ -218,6 +218,12 @@ domínios retornados pela busca e não injeta o ranking de uma única subcategor
 Isso evita que uma consulta ampla, como “casa e cozinha”, seja reduzida apenas
 a espelhos ou a outro tipo de produto dominante naquele momento.
 
+Se uma categoria ampla retornar menos de oito ofertas acessíveis, o backend faz
+uma segunda rodada automática com subconsultas relacionadas. Por exemplo,
+“ferramentas” é ampliada para furadeiras e parafusadeiras, jogos de ferramentas,
+serras elétricas e chaves de impacto. O resumo informa quais variações foram
+tentadas e quantos resultados adicionais foram aproveitados.
+
 No modo **Marca**, o backend confirma a marca pelo atributo oficial `BRAND` do
 catálogo e usa o título apenas quando esse atributo não estiver disponível. Os
 itens de outras marcas encontrados na busca ou no ranking da categoria são

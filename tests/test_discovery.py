@@ -4,7 +4,12 @@ import unittest
 from unittest.mock import patch
 
 from app.collector import _build_item, normalize_item
-from app.service import brand_matches, collect_opportunities, filter_brand_items
+from app.service import (
+    brand_matches,
+    broad_query_expansions,
+    collect_opportunities,
+    filter_brand_items,
+)
 
 
 class BrandDiscoveryTest(unittest.TestCase):
@@ -51,9 +56,17 @@ class BrandDiscoveryTest(unittest.TestCase):
             report = collect_opportunities(
                 "casa e cozinha", 50, "MLB", search_mode="category"
             )
-        self.assertFalse(search.call_args.kwargs["restrict_to_dominant_domain"])
+        self.assertEqual(search.call_count, 5)
+        self.assertTrue(
+            all(not call.kwargs["restrict_to_dominant_domain"] for call in search.call_args_list)
+        )
         self.assertTrue(report["broad_discovery"])
         self.assertEqual(report["ranking_count"], 0)
+        self.assertEqual(len(report["fallback_queries"]), 4)
+
+    def test_known_broad_categories_have_fallback_queries(self) -> None:
+        self.assertIn("jogo de ferramentas", broad_query_expansions("ferramentas"))
+        self.assertIn("perfume feminino", broad_query_expansions("Perfumes"))
 
 
 if __name__ == "__main__":

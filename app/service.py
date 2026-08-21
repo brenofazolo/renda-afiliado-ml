@@ -13,6 +13,32 @@ from .marketplace import category_path, get_category, get_category_best_sellers
 from .scoring import calculate_score
 
 BRAND_STOP_WORDS = {"a", "as", "da", "das", "de", "do", "dos", "e", "o", "os"}
+BROAD_QUERY_EXPANSIONS = {
+    "ferramentas": [
+        "furadeira e parafusadeira",
+        "jogo de ferramentas",
+        "serra elétrica",
+        "chave de impacto",
+    ],
+    "perfumes": [
+        "perfume feminino",
+        "perfume masculino",
+        "kit perfume",
+        "body splash",
+    ],
+    "casa cozinha": [
+        "utensílios de cozinha",
+        "eletroportáteis para cozinha",
+        "organização de cozinha",
+        "panelas e frigideiras",
+    ],
+    "beleza autocuidado": [
+        "skincare",
+        "cuidados com cabelo",
+        "maquiagem",
+        "higiene pessoal",
+    ],
+}
 
 
 def _search_tokens(value: str | None) -> list[str]:
@@ -39,6 +65,22 @@ def filter_brand_items(
 ) -> tuple[list[dict[str, Any]], int]:
     kept = [item for item in items if brand_matches(item, requested_brand)]
     return kept, len(items) - len(kept)
+
+
+def broad_query_expansions(query: str) -> list[str]:
+    return BROAD_QUERY_EXPANSIONS.get(" ".join(_search_tokens(query)), [])
+
+
+def _merge_collection_stats(target: dict[str, Any], extra: dict[str, Any]) -> None:
+    for key in (
+        "products_found",
+        "filtered_by_domain",
+        "with_buy_box",
+        "via_product_items",
+        "without_offer",
+        "analyzed",
+    ):
+        target[key] = int(target.get(key, 0)) + int(extra.get(key, 0))
 
 
 def marketplace_search_url(title: str | None) -> str | None:
@@ -84,6 +126,47 @@ def collect_opportunities(
         restrict_to_dominant_domain=not broad_discovery,
     )
     search_results = [normalize_item(item) for item in raw_search_items]
+    fallback_queries: list[str] = []
+    fallback_added = 0
+    minimum_broad_results = min(limit, 8)
+    expansions = broad_query_expansions(query) if broad_discovery else []
+    if len(search_results) < minimum_broad_results and expansions:
+        known_ids = {
+            item.get("catalog_product_id") for item in search_results if item.get("catalog_product_id")
+        }
+        per_expansion_limit = min(10, max(5, limit // len(expansions)))
+        for expansion in expansions:
+            if len(search_results) >= limit:
+                break
+            extra_stats: dict[str, Any] = {}
+            extra_raw_items = search_items(
+                expansion,
+                per_expansion_limit,
+                site_id,
+                extra_stats,
+                restrict_to_dominant_domain=False,
+            )
+            fallback_queries.append(expansion)
+            _merge_collection_stats(collection_stats, extra_stats)
+            for item in (normalize_item(raw) for raw in extra_raw_items):
+                product_id = item.get("catalog_product_id")
+                if product_id and product_id in known_ids:
+                    continue
+                if product_id:
+                    known_ids.add(product_id)
+                search_results.append(item)
+                fallback_added += 1
+                if len(search_results) >= limit:
+                    break
+        domain_counts_after_expansion = Counter(
+            item.get("domain_id") for item in search_results if item.get("domain_id")
+        )
+        collection_stats["dominant_domain"] = (
+            domain_counts_after_expansion.most_common(1)[0][0]
+            if domain_counts_after_expansion
+            else None
+        )
+        collection_stats["analyzed"] = len(search_results)
     brand_filtered_search = 0
     if search_mode == "brand":
         search_results, brand_filtered_search = filter_brand_items(search_results, query)
@@ -190,6 +273,8 @@ def collect_opportunities(
         "search_results_count": len(search_results),
         "brand_filtered_count": brand_filtered_search + brand_filtered_ranking,
         "broad_discovery": broad_discovery,
+        "fallback_queries": fallback_queries,
+        "fallback_added": fallback_added,
         "started_at": started_at,
         "finished_at": finished_at,
         "elapsed_seconds": time.perf_counter() - started_perf,

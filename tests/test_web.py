@@ -104,6 +104,7 @@ class WebWorkflowTest(unittest.TestCase):
         page = self.client.get("/")
         self.assertIn(b'name="search_mode"', page.data)
         self.assertIn("Atalhos de descoberta".encode(), page.data)
+        self.assertIn(b'rel="icon"', page.data)
         with patch("app.web.collect_opportunities", return_value={}) as collect:
             response = self.client.post(
                 "/",
