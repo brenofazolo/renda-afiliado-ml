@@ -183,6 +183,9 @@ A tela mostra título, preço, score, posição entre os mais vendidos, comissõ
 direta e indireta, link direto quando disponível, busca alternativa no Mercado
 Livre, resumo da coleta e tempo total.
 
+A interface utiliza a identidade visual da LANCES TECH, com logo horizontal
+adaptada para web e paleta baseada em azul-marinho, magenta, branco e prata.
+
 Quando a API não fornece um permalink, a interface monta a rota oficial da
 página do produto de catálogo usando seu identificador. A busca por título
 continua disponível como alternativa. Esses endereços levam ao Mercado Livre;
