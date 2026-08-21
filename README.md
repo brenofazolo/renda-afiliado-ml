@@ -201,6 +201,13 @@ para **Descobrir**, o resultado mais recente é restaurado sem chamar novamente 
 API. O campo aceita produto, marca, tema ou nicho e sugere pesquisas recentes e
 termos configurados em `WEB_SEARCH_SUGGESTIONS`.
 
+O seletor **Quero descobrir por** explicita se o ponto de partida é um produto,
+marca, categoria ou nicho. A lista **Atalhos de descoberta** oferece exemplos
+prontos e preenche automaticamente o tipo e o texto da consulta. Em todos os
+modos, o resultado final continua sendo composto por ofertas comercializáveis;
+o tipo escolhido orienta o contexto inicial da descoberta e fica salvo junto ao
+relatório restaurado.
+
 ## Acesso remoto seguro
 
 Não abra a porta 5000 diretamente no roteador. Para acesso externo, use um

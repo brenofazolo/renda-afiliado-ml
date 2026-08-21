@@ -33,7 +33,12 @@ def catalog_product_url(product_id: str | None, site_id: str = "MLB") -> str | N
     return f"https://{domain}/p/{quote_plus(product_id)}"
 
 
-def collect_opportunities(query: str, limit: int = 20, site_id: str = "MLB") -> dict[str, Any]:
+def collect_opportunities(
+    query: str,
+    limit: int = 20,
+    site_id: str = "MLB",
+    search_mode: str = "product",
+) -> dict[str, Any]:
     """Executa o pipeline do MVP e retorna resultados e diagnóstico da coleta."""
     started_at = datetime.now().astimezone()
     started_perf = time.perf_counter()
@@ -132,6 +137,7 @@ def collect_opportunities(query: str, limit: int = 20, site_id: str = "MLB") -> 
     finished_at = datetime.now().astimezone()
     return {
         "query": query,
+        "search_mode": search_mode,
         "limit": limit,
         "site_id": site_id,
         "items": items,

@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 class WebWorkflowTest(unittest.TestCase):
@@ -98,6 +99,25 @@ class WebWorkflowTest(unittest.TestCase):
         self.assertEqual(restored["query"], "nicho teste")
         self.assertEqual(restored["report"]["items"][0]["title"], "Produto persistido")
         self.assertIn("nicho teste", recent_queries())
+
+    def test_discovery_mode_and_preset_controls(self) -> None:
+        page = self.client.get("/")
+        self.assertIn(b'name="search_mode"', page.data)
+        self.assertIn("Atalhos de descoberta".encode(), page.data)
+        with patch("app.web.collect_opportunities", return_value={}) as collect:
+            response = self.client.post(
+                "/",
+                data={
+                    "csrf_token": self.csrf_token,
+                    "query": "beleza e autocuidado",
+                    "search_mode": "niche",
+                    "limit": "12",
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        collect.assert_called_once_with(
+            "beleza e autocuidado", 12, "MLB", search_mode="niche"
+        )
 
 
 if __name__ == "__main__":

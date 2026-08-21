@@ -23,6 +23,26 @@ from .storage import (
 
 load_dotenv()
 
+SEARCH_MODES = {
+    "product": "Produto específico",
+    "brand": "Marca",
+    "category": "Categoria",
+    "niche": "Tema ou nicho",
+}
+
+SEARCH_PRESETS = [
+    {"mode": "product", "label": "Air fryer", "query": "air fryer"},
+    {"mode": "product", "label": "Smartwatch", "query": "smartwatch"},
+    {"mode": "brand", "label": "Mondial", "query": "Mondial"},
+    {"mode": "brand", "label": "O Boticário", "query": "O Boticário"},
+    {"mode": "category", "label": "Perfumes", "query": "perfumes"},
+    {"mode": "category", "label": "Ferramentas", "query": "ferramentas"},
+    {"mode": "category", "label": "Casa e cozinha", "query": "casa e cozinha"},
+    {"mode": "niche", "label": "Beleza e autocuidado", "query": "beleza e autocuidado"},
+    {"mode": "niche", "label": "Fitness em casa", "query": "fitness em casa"},
+    {"mode": "niche", "label": "Organização doméstica", "query": "organização doméstica"},
+]
+
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -119,6 +139,10 @@ def create_app() -> Flask:
         query = request.form.get(
             "query", latest["query"] if latest else os.getenv("MELI_QUERY", "air fryer")
         ).strip()
+        restored_mode = (latest or {}).get("report", {}).get("search_mode", "product")
+        search_mode = request.form.get("search_mode", restored_mode)
+        if search_mode not in SEARCH_MODES:
+            search_mode = "product"
         try:
             default_limit = latest["limit"] if latest else os.getenv("MELI_LIMIT", "20")
             limit = max(1, min(int(request.form.get("limit", default_limit)), 50))
@@ -131,7 +155,12 @@ def create_app() -> Flask:
                 error = "Informe um texto para a consulta."
             else:
                 try:
-                    report = collect_opportunities(query, limit, os.getenv("MELI_SITE_ID", "MLB"))
+                    report = collect_opportunities(
+                        query,
+                        limit,
+                        os.getenv("MELI_SITE_ID", "MLB"),
+                        search_mode=search_mode,
+                    )
                     save_search_run(query, limit, report)
                 except Exception as exc:  # mensagem operacional sem expor traceback no navegador
                     error = str(exc)
@@ -147,6 +176,9 @@ def create_app() -> Flask:
             report=report,
             error=error,
             suggestions=suggestions,
+            search_mode=search_mode,
+            search_modes=SEARCH_MODES,
+            search_presets=SEARCH_PRESETS,
             restored=bool(latest),
         )
 
