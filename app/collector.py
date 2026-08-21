@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote_plus
@@ -8,6 +9,7 @@ from urllib.parse import quote_plus
 from .token_manager import meli_request
 
 BASE_URL = "https://api.mercadolibre.com"
+MAX_WORKERS = 5
 
 
 def _offer_for_product(product_id: str) -> tuple[dict[str, Any] | None, dict[str, Any], str | None]:
@@ -42,9 +44,6 @@ def _build_item(
     item["catalog_product_id"] = product_id
     item["domain_id"] = product.get("domain_id") or detail.get("domain_id")
     item["offer_source"] = offer_source
-    # /items/{item_id} pode estar bloqueado para a aplicação atual. O detalhe
-    # do produto de catálogo, porém, expõe um permalink público estável que
-    # permite ao usuário abrir a página do produto no Mercado Livre.
     item["permalink"] = detail.get("permalink")
     item["pictures"] = detail.get("pictures") or []
     first_picture = next(iter(item["pictures"]), {})
@@ -56,13 +55,38 @@ def _build_item(
     return item
 
 
+def _collect_search_candidate(
+    args: tuple[int, dict[str, Any], str, str]
+) -> tuple[dict[str, Any] | None, str]:
+    position, product, query, collected_at = args
+    product_id = product.get("id")
+    if not product_id:
+        return None, "without_offer"
+
+    offer, detail, offer_source = _offer_for_product(product_id)
+    if not offer or not offer_source:
+        return None, "without_offer"
+
+    item = _build_item(
+        product_id=product_id,
+        product=product,
+        detail=detail,
+        offer=offer,
+        offer_source=offer_source,
+        query=query,
+        collected_at=collected_at,
+        search_position=position,
+    )
+    return item, offer_source
+
+
 def search_items(
     query: str,
     limit: int = 20,
     site_id: str = "MLB",
     stats: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Busca produtos de catálogo e devolve uma oferta concreta de cada produto."""
+    """Busca produtos de catálogo e coleta ofertas em paralelo controlado."""
     limit = max(1, min(limit, 50))
     response = meli_request(
         "GET",
@@ -86,43 +110,31 @@ def search_items(
         "via_product_items": 0,
         "without_offer": 0,
         "analyzed": 0,
+        "parallel_workers": MAX_WORKERS,
     }
 
     collected_at = datetime.now(timezone.utc).isoformat()
-    items: list[dict[str, Any]] = []
+    candidates: list[tuple[int, dict[str, Any], str, str]] = []
 
     for position, product in enumerate(products, start=1):
         if dominant_domain and product.get("domain_id") != dominant_domain:
             collection_stats["filtered_by_domain"] += 1
             continue
+        candidates.append((position, product, query, collected_at))
 
-        product_id = product.get("id")
-        if not product_id:
-            collection_stats["without_offer"] += 1
-            continue
-
-        offer, detail, offer_source = _offer_for_product(product_id)
-        if not offer or not offer_source:
-            collection_stats["without_offer"] += 1
-            continue
-
-        if offer_source == "buy_box_winner":
-            collection_stats["with_buy_box"] += 1
-        else:
-            collection_stats["via_product_items"] += 1
-
-        items.append(
-            _build_item(
-                product_id=product_id,
-                product=product,
-                detail=detail,
-                offer=offer,
-                offer_source=offer_source,
-                query=query,
-                collected_at=collected_at,
-                search_position=position,
-            )
-        )
+    items: list[dict[str, Any]] = []
+    if candidates:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            for item, status in executor.map(_collect_search_candidate, candidates):
+                if status == "without_offer":
+                    collection_stats["without_offer"] += 1
+                    continue
+                if status == "buy_box_winner":
+                    collection_stats["with_buy_box"] += 1
+                elif status == "product_items":
+                    collection_stats["via_product_items"] += 1
+                if item:
+                    items.append(item)
 
     collection_stats["analyzed"] = len(items)
     if stats is not None:
@@ -132,18 +144,43 @@ def search_items(
     return items
 
 
+def _collect_ranked_candidate(
+    args: tuple[dict[str, Any], str, str]
+) -> tuple[dict[str, Any] | None, str]:
+    entry, query, collected_at = args
+    product_id = entry.get("id")
+    if not product_id:
+        return None, "without_offer"
+
+    offer, detail, offer_source = _offer_for_product(product_id)
+    if not offer or not offer_source:
+        return None, "without_offer"
+
+    product = {
+        "id": product_id,
+        "name": detail.get("name"),
+        "domain_id": detail.get("domain_id"),
+    }
+    item = _build_item(
+        product_id=product_id,
+        product=product,
+        detail=detail,
+        offer=offer,
+        offer_source=offer_source,
+        query=query,
+        collected_at=collected_at,
+        best_seller_position=entry.get("position"),
+    )
+    return item, offer_source
+
+
 def collect_ranked_products(
     ranked_products: list[dict[str, Any]],
     query: str,
     existing_product_ids: set[str] | None = None,
     stats: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Coleta ofertas concretas para produtos vindos do ranking de mais vendidos.
-
-    `ranked_products` deve conter os campos `id`, `position` e `type` retornados
-    pelo endpoint de highlights da categoria. Produtos já presentes na busca são
-    ignorados para evitar duplicidade.
-    """
+    """Coleta em paralelo ofertas concretas para produtos do ranking."""
     existing = existing_product_ids or set()
     collected_at = datetime.now(timezone.utc).isoformat()
     items: list[dict[str, Any]] = []
@@ -154,48 +191,34 @@ def collect_ranked_products(
         "ranking_via_product_items": 0,
         "ranking_without_offer": 0,
         "ranking_added": 0,
+        "parallel_workers": MAX_WORKERS,
     }
 
+    candidates: list[tuple[dict[str, Any], str, str]] = []
     for entry in ranked_products:
         if entry.get("type") != "PRODUCT":
             continue
-
         product_id = entry.get("id")
         if not product_id:
             continue
-
         ranking_stats["ranking_products"] += 1
         if product_id in existing:
             ranking_stats["ranking_duplicates"] += 1
             continue
+        candidates.append((entry, query, collected_at))
 
-        offer, detail, offer_source = _offer_for_product(product_id)
-        if not offer or not offer_source:
-            ranking_stats["ranking_without_offer"] += 1
-            continue
-
-        if offer_source == "buy_box_winner":
-            ranking_stats["ranking_with_buy_box"] += 1
-        else:
-            ranking_stats["ranking_via_product_items"] += 1
-
-        product = {
-            "id": product_id,
-            "name": detail.get("name"),
-            "domain_id": detail.get("domain_id"),
-        }
-        items.append(
-            _build_item(
-                product_id=product_id,
-                product=product,
-                detail=detail,
-                offer=offer,
-                offer_source=offer_source,
-                query=query,
-                collected_at=collected_at,
-                best_seller_position=entry.get("position"),
-            )
-        )
+    if candidates:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            for item, status in executor.map(_collect_ranked_candidate, candidates):
+                if status == "without_offer":
+                    ranking_stats["ranking_without_offer"] += 1
+                    continue
+                if status == "buy_box_winner":
+                    ranking_stats["ranking_with_buy_box"] += 1
+                elif status == "product_items":
+                    ranking_stats["ranking_via_product_items"] += 1
+                if item:
+                    items.append(item)
 
     ranking_stats["ranking_added"] = len(items)
     if stats is not None:
