@@ -67,6 +67,12 @@ def _build_item(
     # preserve-o quando o detalhe não fornecer um endereço.
     item["permalink"] = detail.get("permalink") or offer.get("permalink")
     item["pictures"] = detail.get("pictures") or []
+    attributes = detail.get("attributes") or product.get("attributes") or []
+    brand_attribute = next(
+        (attribute for attribute in attributes if attribute.get("id") == "BRAND"),
+        {},
+    )
+    item["brand"] = brand_attribute.get("value_name")
     first_picture = next(iter(item["pictures"]), {})
     item["thumbnail"] = first_picture.get("secure_url") or first_picture.get("url")
     item["_collection_position"] = search_position
@@ -325,6 +331,7 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         "item_id": item.get("id"),
         "offer_source": item.get("offer_source"),
         "title": item.get("title"),
+        "brand": item.get("brand"),
         "category_id": item.get("category_id"),
         "seller_id": item.get("seller_id"),
         "price": price,

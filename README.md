@@ -208,6 +208,11 @@ modos, o resultado final continua sendo composto por ofertas comercializáveis;
 o tipo escolhido orienta o contexto inicial da descoberta e fica salvo junto ao
 relatório restaurado.
 
+No modo **Marca**, o backend confirma a marca pelo atributo oficial `BRAND` do
+catálogo e usa o título apenas quando esse atributo não estiver disponível. Os
+itens de outras marcas encontrados na busca ou no ranking da categoria são
+descartados e contabilizados no resumo da coleta.
+
 ## Acesso remoto seguro
 
 Não abra a porta 5000 diretamente no roteador. Para acesso externo, use um

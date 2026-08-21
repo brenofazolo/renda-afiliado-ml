@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import unicodedata
 from collections import Counter
 from datetime import datetime
 from typing import Any
@@ -10,6 +11,34 @@ from .affiliate import estimate_commission, find_commission, load_rules
 from .collector import collect_ranked_products, normalize_item, search_items
 from .marketplace import category_path, get_category, get_category_best_sellers
 from .scoring import calculate_score
+
+BRAND_STOP_WORDS = {"a", "as", "da", "das", "de", "do", "dos", "e", "o", "os"}
+
+
+def _search_tokens(value: str | None) -> list[str]:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    plain = "".join(character for character in normalized if not unicodedata.combining(character))
+    return [
+        token
+        for token in "".join(character if character.isalnum() else " " for character in plain.casefold()).split()
+        if token not in BRAND_STOP_WORDS
+    ]
+
+
+def brand_matches(item: dict[str, Any], requested_brand: str) -> bool:
+    """Confirma a marca pelo atributo oficial e usa o título como fallback."""
+    requested = _search_tokens(requested_brand)
+    if not requested:
+        return False
+    candidate = _search_tokens(item.get("brand") or item.get("title"))
+    return all(token in candidate for token in requested)
+
+
+def filter_brand_items(
+    items: list[dict[str, Any]], requested_brand: str
+) -> tuple[list[dict[str, Any]], int]:
+    kept = [item for item in items if brand_matches(item, requested_brand)]
+    return kept, len(items) - len(kept)
 
 
 def marketplace_search_url(title: str | None) -> str | None:
@@ -48,6 +77,9 @@ def collect_opportunities(
     collection_stats: dict[str, Any] = {}
     raw_search_items = search_items(query, limit, site_id, collection_stats)
     search_results = [normalize_item(item) for item in raw_search_items]
+    brand_filtered_search = 0
+    if search_mode == "brand":
+        search_results, brand_filtered_search = filter_brand_items(search_results, query)
     timings["busca_e_ofertas"] = time.perf_counter() - stage
 
     rules = load_rules()
@@ -101,6 +133,9 @@ def collect_opportunities(
         stats=ranking_stats,
     )
     ranked_results = [normalize_item(item) for item in raw_ranked_items]
+    brand_filtered_ranking = 0
+    if search_mode == "brand":
+        ranked_results, brand_filtered_ranking = filter_brand_items(ranked_results, query)
     timings["ofertas_ranking"] = time.perf_counter() - stage
 
     stage = time.perf_counter()
@@ -146,6 +181,7 @@ def collect_opportunities(
         "ranking_count": len(ranking_map),
         "dominant_category_label": dominant_category_label,
         "search_results_count": len(search_results),
+        "brand_filtered_count": brand_filtered_search + brand_filtered_ranking,
         "started_at": started_at,
         "finished_at": finished_at,
         "elapsed_seconds": time.perf_counter() - started_perf,
