@@ -107,6 +107,15 @@ class BrandDiscoveryTest(unittest.TestCase):
         self.assertEqual(stats["max_price"], 1)
         self.assertEqual(ordering, "potential")
 
+    def test_general_potential_builds_a_multi_query_pool(self) -> None:
+        with patch("app.service.search_items", return_value=[]) as search:
+            report = collect_opportunities(
+                "", 20, "MLB", search_mode="potential", sort_by="commission"
+            )
+        self.assertEqual(search.call_count, 6)
+        self.assertTrue(report["general_potential"])
+        self.assertEqual(report["filters"]["sort_by"], "potential")
+
 
 if __name__ == "__main__":
     unittest.main()

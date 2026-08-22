@@ -26,6 +26,7 @@ from .storage import (
 load_dotenv()
 
 SEARCH_MODES = {
+    "potential": "Potencial de Renda",
     "product": "Produto específico",
     "brand": "Marca",
     "category": "Categoria",
@@ -168,16 +169,17 @@ def create_app() -> Flask:
     @login_required
     def index() -> str:
         latest = latest_search_run() if request.method == "GET" else None
-        query = request.form.get(
-            "query", latest["query"] if latest else os.getenv("MELI_QUERY", "air fryer")
-        ).strip()
-        restored_mode = (latest or {}).get("report", {}).get("search_mode", "product")
+        restored_report = (latest or {}).get("report") or {}
+        query = (request.form.get(
+            "query", latest["query"] if latest else ""
+        ) or "").strip()
+        restored_mode = restored_report.get("search_mode", "potential")
         search_mode = request.form.get("search_mode", restored_mode)
         if search_mode not in SEARCH_MODES:
-            search_mode = "product"
-        restored_category_id = (latest or {}).get("report", {}).get("category_id", "")
-        category_id = request.form.get("category_id", restored_category_id).strip()
-        restored_filters = (latest or {}).get("report", {}).get("filters", {})
+            search_mode = "potential"
+        restored_category_id = restored_report.get("category_id", "")
+        category_id = (request.form.get("category_id", restored_category_id) or "").strip()
+        restored_filters = restored_report.get("filters") or {}
         brand_filter = request.form.get("brand_filter", restored_filters.get("brand") or "").strip()
 
         def optional_number(name: str) -> float | None:
@@ -205,16 +207,20 @@ def create_app() -> Flask:
         sort_by = request.form.get("sort_by", restored_filters.get("sort_by", "potential"))
         if sort_by not in {"potential", "commission", "bestseller", "price"}:
             sort_by = "potential"
+        if search_mode == "potential":
+            sort_by = "potential"
         try:
             default_limit = latest["limit"] if latest else os.getenv("MELI_LIMIT", "20")
             limit = max(1, min(int(request.form.get("limit", default_limit)), 50))
         except ValueError:
             limit = 20
-        report = latest["report"] if latest else None
+        report = restored_report if latest else None
         error = None
         if request.method == "POST":
-            if not query:
-                error = "Informe um texto para a consulta."
+            if search_mode in {"product", "brand", "niche"} and not query:
+                error = "Informe um texto para este tipo de descoberta."
+            elif search_mode == "category" and not category_id:
+                error = "Escolha uma categoria oficial para continuar."
             else:
                 try:
                     report = collect_opportunities(

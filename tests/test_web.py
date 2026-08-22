@@ -105,6 +105,8 @@ class WebWorkflowTest(unittest.TestCase):
         self.assertIn(b'name="search_mode"', page.data)
         self.assertIn("Filtros comerciais".encode(), page.data)
         self.assertIn("Potencial de Renda".encode(), page.data)
+        self.assertIn(b'value="potential"', page.data)
+        self.assertIn(b'navigation.js', page.data)
         self.assertIn(b'rel="icon"', page.data)
         with patch("app.web.collect_opportunities", return_value={}) as collect:
             response = self.client.post(
@@ -183,6 +185,48 @@ class WebWorkflowTest(unittest.TestCase):
         self.assertIn("Sua sessão expirou".encode(), response.data)
         with self.client.session_transaction() as current_session:
             self.assertFalse(current_session.get("authenticated"))
+
+    def test_legacy_null_category_does_not_break_discover(self) -> None:
+        from app.storage import save_search_run
+
+        save_search_run(
+            "consulta antiga",
+            20,
+            {
+                "category_id": None,
+                "filters": {"brand": None},
+                "items": [],
+                "collection_stats": {
+                    "products_found": 0,
+                    "dominant_domain": None,
+                    "filtered_by_domain": 0,
+                    "without_offer": 0,
+                },
+                "ranking_stats": {},
+                "ranking_count": 0,
+                "dominant_category_label": None,
+                "elapsed_seconds": 0,
+            },
+        )
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_general_potential_accepts_empty_query(self) -> None:
+        with patch("app.web.collect_opportunities", return_value={}) as collect:
+            response = self.client.post(
+                "/",
+                data={
+                    "csrf_token": self.csrf_token,
+                    "query": "",
+                    "search_mode": "potential",
+                    "limit": "20",
+                    "sort_by": "commission",
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(collect.call_args.args[:3], ("", 20, "MLB"))
+        self.assertEqual(collect.call_args.kwargs["search_mode"], "potential")
+        self.assertEqual(collect.call_args.kwargs["sort_by"], "potential")
 
     def test_commercial_filters_are_parsed_and_forwarded(self) -> None:
         with patch("app.web.collect_opportunities", return_value={}) as collect:

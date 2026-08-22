@@ -39,6 +39,14 @@ BROAD_QUERY_EXPANSIONS = {
         "higiene pessoal",
     ],
 }
+POTENTIAL_DISCOVERY_QUERIES = [
+    "air fryer",
+    "perfumes",
+    "ferramentas",
+    "smartwatch",
+    "beleza e autocuidado",
+    "casa e cozinha",
+]
 
 
 def _search_tokens(value: str | None) -> list[str]:
@@ -167,11 +175,40 @@ def collect_opportunities(
     stage = time.perf_counter()
     collection_stats: dict[str, Any] = {}
     selected_category = get_category(category_id) if category_id else None
-    broad_discovery = search_mode in {"category", "niche"} and not category_id
-    raw_search_items = [] if category_id else search_items(
-        query, limit, site_id, collection_stats,
-        restrict_to_dominant_domain=not broad_discovery,
+    general_potential = search_mode == "potential" and not query and not category_id
+    broad_discovery = general_potential or (
+        search_mode in {"category", "niche"} and not category_id
     )
+    raw_search_items: list[dict[str, Any]] = []
+    if general_potential:
+        collection_stats.update(
+            products_found=0, dominant_domain=None, filtered_by_domain=0,
+            with_buy_box=0, via_product_items=0, without_offer=0, analyzed=0,
+        )
+        known_product_ids: set[str] = set()
+        per_query_limit = max(3, min(8, limit // len(POTENTIAL_DISCOVERY_QUERIES) or 3))
+        for discovery_query in POTENTIAL_DISCOVERY_QUERIES:
+            seed_stats: dict[str, Any] = {}
+            seed_items = search_items(
+                discovery_query,
+                per_query_limit,
+                site_id,
+                seed_stats,
+                restrict_to_dominant_domain=True,
+            )
+            _merge_collection_stats(collection_stats, seed_stats)
+            for item in seed_items:
+                product_id = item.get("catalog_product_id")
+                if product_id and product_id in known_product_ids:
+                    continue
+                if product_id:
+                    known_product_ids.add(product_id)
+                raw_search_items.append(item)
+    elif not category_id:
+        raw_search_items = search_items(
+            query, limit, site_id, collection_stats,
+            restrict_to_dominant_domain=not broad_discovery,
+        )
     if category_id:
         collection_stats.update(
             products_found=0,
@@ -320,6 +357,8 @@ def collect_opportunities(
         item["catalog_url"] = catalog_product_url(
             item.get("catalog_product_id"), site_id
         )
+    if search_mode == "potential":
+        sort_by = "potential"
     items, filter_stats, sort_by = apply_commercial_filters(
         items,
         brand_filter=brand_filter,
@@ -347,6 +386,7 @@ def collect_opportunities(
         "search_results_count": len(search_results),
         "brand_filtered_count": brand_filtered_search + brand_filtered_ranking,
         "broad_discovery": broad_discovery,
+        "general_potential": general_potential,
         "fallback_queries": fallback_queries,
         "fallback_added": fallback_added,
         "filters": {
