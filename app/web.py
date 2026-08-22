@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
 
 from .service import collect_opportunities
+from .scoring import score_confidence
 from .marketplace import category_path, get_category, get_site_categories
 from .storage import (
     clear_search_runs,
@@ -171,6 +172,8 @@ def create_app() -> Flask:
     def index() -> str:
         latest = latest_search_run() if request.method == "GET" else None
         restored_report = (latest or {}).get("report") or {}
+        for restored_item in restored_report.get("items", []):
+            restored_item.setdefault("score_confidence", score_confidence(restored_item))
         query = (request.form.get(
             "query", latest["query"] if latest else ""
         ) or "").strip()

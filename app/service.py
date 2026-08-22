@@ -11,7 +11,7 @@ from urllib.parse import quote_plus
 from .affiliate import estimate_commission, find_commission, load_rules
 from .collector import collect_ranked_products, normalize_item, search_items
 from .marketplace import category_path, get_category, get_category_best_sellers, get_trends
-from .scoring import calculate_score
+from .scoring import calculate_score, score_confidence
 
 BRAND_STOP_WORDS = {"a", "as", "da", "das", "de", "do", "dos", "e", "o", "os"}
 BROAD_QUERY_EXPANSIONS = {
@@ -48,6 +48,23 @@ POTENTIAL_DISCOVERY_QUERIES = [
     "beleza e autocuidado",
     "casa e cozinha",
 ]
+POTENTIAL_INTENT_MARKERS = {
+    "air fryer": {"air fryer", "fritadeira", "air fryers"},
+    "perfumes": {"perfume", "perfumaria", "fragrance", "cologne", "body splash"},
+    "ferramentas": {
+        "ferramenta", "tool", "drill", "furadeira", "parafusadeira", "serra",
+        "esmerilhadeira", "solda", "lavadora de alta pressao",
+    },
+    "smartwatch": {"smartwatch", "relogio inteligente", "smart watch", "wearable"},
+    "beleza autocuidado": {
+        "beleza e cuidado pessoal", "beauty", "skincare", "maquiagem", "cabelo",
+        "higiene pessoal", "cosmetico", "perfume",
+    },
+    "casa cozinha": {
+        "casa moveis", "cozinha", "kitchen", "cookware", "eletrodomestico",
+        "utensilio", "panela", "organizacao da casa",
+    },
+}
 
 
 def _search_tokens(value: str | None) -> list[str]:
@@ -78,6 +95,27 @@ def filter_brand_items(
 
 def broad_query_expansions(query: str) -> list[str]:
     return BROAD_QUERY_EXPANSIONS.get(" ".join(_search_tokens(query)), [])
+
+
+def commercially_relevant(item: dict[str, Any]) -> bool:
+    """Valida se o produto respeita a intenção que originou sua descoberta."""
+    query_key = " ".join(_search_tokens(item.get("query")))
+    title = " ".join(_search_tokens(item.get("title")))
+    category = " ".join(_search_tokens(item.get("category_path")))
+    domain = " ".join(_search_tokens(item.get("domain_id")))
+    category_context = f"{category} {domain}"
+    markers = POTENTIAL_INTENT_MARKERS.get(query_key)
+    if markers:
+        return any(
+            " ".join(_search_tokens(marker)) in category_context
+            for marker in markers
+        )
+    query_tokens = set(_search_tokens(item.get("query")))
+    if not query_tokens:
+        return True
+    candidate_tokens = set(_search_tokens(f"{title} {category} {domain}"))
+    required = max(1, ceil(len(query_tokens) * 0.6))
+    return len(query_tokens & candidate_tokens) >= required
 
 
 def _merge_collection_stats(target: dict[str, Any], extra: dict[str, Any]) -> None:
@@ -343,6 +381,11 @@ def collect_opportunities(
     stage = time.perf_counter()
     for item in search_results:
         enrich_category(item)
+    if general_potential:
+        relevant_results = [item for item in search_results if commercially_relevant(item)]
+        collection_stats["irrelevant"] = len(search_results) - len(relevant_results)
+        search_results = relevant_results
+        collection_stats["analyzed"] = len(search_results)
     timings["categorias_busca"] = time.perf_counter() - stage
 
     category_counts = Counter(
@@ -407,6 +450,7 @@ def collect_opportunities(
         item["marketplace_score"] = score
         item["potential_score"] = score
         item["score_status"] = "provisório"
+        item["score_confidence"] = score_confidence(item)
         item["score_components"] = "; ".join(
             f"{key}={value}" for key, value in components.items()
         )

@@ -22,7 +22,13 @@ def calculate_score(item: dict[str, Any], total_results: int) -> tuple[float, di
     else:
         best_seller_score = 0
 
-    demand_score = (search_position_score * 0.35) + (best_seller_score * 0.65)
+    if best_seller_position:
+        demand_score = 40 + (best_seller_score * 0.60)
+    elif item.get("discovery_source") == "Tendência":
+        demand_score = 45 + (search_position_score * 0.15)
+    else:
+        # Posição na busca é descoberta, não prova de venda.
+        demand_score = search_position_score * 0.15
 
     discount = item.get("discount_percent")
     discount_score = _clamp(float(discount or 0) * 2.5)
@@ -50,7 +56,7 @@ def calculate_score(item: dict[str, Any], total_results: int) -> tuple[float, di
     store_score = 100 if item.get("official_store_id") else 50
 
     components = {
-        "demanda": demand_score,
+        "sinal_demanda": demand_score,
         "preco_oferta": price_offer_score,
         "comissao_afiliado": commission_score,
         "frete": shipping_score,
@@ -60,7 +66,7 @@ def calculate_score(item: dict[str, Any], total_results: int) -> tuple[float, di
     }
 
     score = (
-        components["demanda"] * 0.25
+        components["sinal_demanda"] * 0.25
         + components["preco_oferta"] * 0.20
         + components["comissao_afiliado"] * 0.15
         + components["frete"] * 0.10
@@ -70,3 +76,12 @@ def calculate_score(item: dict[str, Any], total_results: int) -> tuple[float, di
     )
 
     return round(score, 2), {k: round(v, 2) for k, v in components.items()}
+
+
+def score_confidence(item: dict[str, Any]) -> str:
+    """Indica a força da evidência usada, separada do valor do score."""
+    if item.get("best_seller_position"):
+        return "alta"
+    if item.get("discovery_source") == "Tendência":
+        return "média"
+    return "baixa"

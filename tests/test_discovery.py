@@ -9,11 +9,32 @@ from app.service import (
     brand_matches,
     broad_query_expansions,
     collect_opportunities,
+    commercially_relevant,
     filter_brand_items,
 )
 
 
 class BrandDiscoveryTest(unittest.TestCase):
+    def test_relevance_rejects_book_from_beauty_intent(self) -> None:
+        self.assertFalse(
+            commercially_relevant({
+                "query": "beleza e autocuidado",
+                "title": "Beleza e consciência",
+                "category_path": "Livros > Livros físicos",
+                "domain_id": "MLB-BOOKS",
+            })
+        )
+
+    def test_relevance_accepts_product_matching_weekly_trend(self) -> None:
+        self.assertTrue(
+            commercially_relevant({
+                "query": "fone ouvido bluetooth",
+                "title": "Fone de ouvido Philips Bluetooth",
+                "category_path": "Eletrônicos > Fones de Ouvido",
+                "domain_id": "MLB-HEADPHONES",
+            })
+        )
+
     def test_catalog_brand_attribute_is_preserved(self) -> None:
         item = _build_item(
             product_id="MLB1",
