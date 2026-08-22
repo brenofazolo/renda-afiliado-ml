@@ -398,8 +398,34 @@ def collect_opportunities(
     stage = time.perf_counter()
     best_sellers: list[dict[str, Any]] = []
     ranking_stats: dict[str, Any] = {}
+    ranking_categories: list[tuple[str, str]] = []
+    if general_potential:
+        trend_category_counts = Counter(
+            item.get("category_id")
+            for item in search_results
+            if item.get("discovery_source") == "Tendência" and item.get("category_id")
+        )
+        for ranked_category_id, _ in trend_category_counts.most_common(2):
+            category_query = next(
+                (
+                    item.get("query") or ""
+                    for item in search_results
+                    if item.get("category_id") == ranked_category_id
+                    and item.get("discovery_source") == "Tendência"
+                ),
+                "",
+            )
+            ranking_categories.append((ranked_category_id, category_query))
+    elif dominant_category_id and not broad_discovery:
+        ranking_categories.append((dominant_category_id, query))
+
+    for ranked_category_id, category_query in ranking_categories:
+        category_ranking = get_category_best_sellers(ranked_category_id, site_id)
+        for entry in category_ranking:
+            entry["_category_id"] = ranked_category_id
+            entry["_query"] = category_query
+        best_sellers.extend(category_ranking)
     if dominant_category_id and not broad_discovery:
-        best_sellers = get_category_best_sellers(dominant_category_id, site_id)
         if category_id:
             collection_stats["products_found"] = len(best_sellers)
     timings["ranking"] = time.perf_counter() - stage
@@ -410,9 +436,10 @@ def collect_opportunities(
         if entry.get("type") == "PRODUCT" and entry.get("id")
     }
     existing_product_ids = {
-        item.get("catalog_product_id")
+        entity_id
         for item in search_results
-        if item.get("catalog_product_id")
+        for entity_id in (item.get("catalog_product_id"), item.get("item_id"))
+        if entity_id
     }
 
     stage = time.perf_counter()
@@ -423,6 +450,24 @@ def collect_opportunities(
         stats=ranking_stats,
     )
     ranked_results = [normalize_item(item) for item in raw_ranked_items]
+    seen_ranked_ids = set(existing_product_ids)
+    unique_ranked_results: list[dict[str, Any]] = []
+    for ranked_item in ranked_results:
+        identities = {
+            value
+            for value in (
+                ranked_item.get("catalog_product_id"), ranked_item.get("item_id")
+            )
+            if value
+        }
+        if identities & seen_ranked_ids:
+            ranking_stats["ranking_duplicates"] = int(
+                ranking_stats.get("ranking_duplicates", 0)
+            ) + 1
+            continue
+        seen_ranked_ids.update(identities)
+        unique_ranked_results.append(ranked_item)
+    ranked_results = unique_ranked_results
     brand_filtered_ranking = 0
     if search_mode == "brand":
         ranked_results, brand_filtered_ranking = filter_brand_items(ranked_results, query)
@@ -431,6 +476,9 @@ def collect_opportunities(
     stage = time.perf_counter()
     for item in ranked_results:
         enrich_category(item)
+    if general_potential:
+        ranked_results = [item for item in ranked_results if commercially_relevant(item)]
+    ranking_stats["ranking_added"] = len(ranked_results)
     timings["categorias_ranking"] = time.perf_counter() - stage
 
     items = search_results + ranked_results
@@ -440,9 +488,13 @@ def collect_opportunities(
 
     stage = time.perf_counter()
     for item in items:
-        ranking_position = ranking_map.get(item.get("catalog_product_id"))
+        ranking_position = item.get("best_seller_position") or ranking_map.get(
+            item.get("catalog_product_id")
+        )
         item["best_seller_position"] = ranking_position
-        item["best_seller_category"] = dominant_category_id if ranking_position else None
+        item["best_seller_category"] = item.get("best_seller_category") or (
+            dominant_category_id if ranking_position else None
+        )
         rule = find_commission(item.get("category_path") or "", rules)
         item.update(estimate_commission(item.get("price"), rule))
         item["commission_rule"] = rule.get("label") if rule else None
@@ -482,7 +534,7 @@ def collect_opportunities(
         "items": items,
         "collection_stats": collection_stats,
         "ranking_stats": ranking_stats,
-        "ranking_count": len(ranking_map),
+        "ranking_count": len({entry.get("id") for entry in best_sellers if entry.get("id")}),
         "dominant_category_label": dominant_category_label,
         "search_results_count": len(search_results),
         "brand_filtered_count": brand_filtered_search + brand_filtered_ranking,

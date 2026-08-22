@@ -170,6 +170,37 @@ class BrandDiscoveryTest(unittest.TestCase):
             ["tendência 1", "tendência 2", "tendência 3", "tendência 4"],
         )
 
+    def test_general_potential_fetches_rankings_for_top_trend_categories(self) -> None:
+        def search(query, *_args, **_kwargs):
+            if query == "fone bluetooth":
+                return [{"query": query, "discovery_source": "Tendência", "title": query,
+                         "category_id": "MLB1", "domain_id": "MLB-HEADPHONES"}]
+            if query == "armário cozinha":
+                return [{"query": query, "discovery_source": "Tendência", "title": query,
+                         "category_id": "MLB2", "domain_id": "MLB-KITCHEN_CABINETS"}]
+            return []
+
+        with (
+            patch("app.service.get_trends", return_value=[
+                {"keyword": "fone bluetooth"}, {"keyword": "armário cozinha"}
+            ]),
+            patch("app.service.search_items", side_effect=search),
+            patch("app.service.normalize_item", side_effect=lambda item: item),
+            patch("app.service.get_category", side_effect=lambda category_id: {
+                "id": category_id,
+                "name": category_id,
+                "path_from_root": [{"id": category_id, "name": (
+                    "Fones de Ouvido" if category_id == "MLB1" else "Armários de Cozinha"
+                )}],
+            }),
+            patch("app.service.get_category_best_sellers", return_value=[]) as ranking,
+            patch("app.service.collect_ranked_products", return_value=[]),
+        ):
+            collect_opportunities("", 20, "MLB", search_mode="potential")
+        self.assertEqual(
+            [call.args[0] for call in ranking.call_args_list], ["MLB1", "MLB2"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

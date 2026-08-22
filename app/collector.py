@@ -55,6 +55,7 @@ def _build_item(
     collected_at: str,
     search_position: int | None = None,
     best_seller_position: int | None = None,
+    best_seller_category: str | None = None,
 ) -> dict[str, Any]:
     item = dict(offer)
     item["id"] = offer.get("item_id")
@@ -77,6 +78,7 @@ def _build_item(
     item["thumbnail"] = first_picture.get("secure_url") or first_picture.get("url")
     item["_collection_position"] = search_position
     item["_best_seller_position"] = best_seller_position
+    item["_best_seller_category"] = best_seller_category
     item["_collected_at"] = collected_at
     item["_query"] = query
     return item
@@ -180,30 +182,55 @@ def _collect_ranked_candidate(
     args: tuple[dict[str, Any], str, str]
 ) -> tuple[dict[str, Any] | None, str]:
     entry, query, collected_at = args
-    product_id = entry.get("id")
-    if not product_id:
+    entity_id = entry.get("id")
+    entity_type = entry.get("type")
+    if not entity_id:
         return None, "without_offer"
-
-    offer, detail, offer_source = _offer_for_product(product_id)
-    if not offer or not offer_source:
+    try:
+        if entity_type == "PRODUCT":
+            offer, detail, offer_source = _offer_for_product(entity_id)
+            if not offer or not offer_source:
+                return None, "without_offer"
+            product = {
+                "id": entity_id,
+                "name": detail.get("name"),
+                "domain_id": detail.get("domain_id"),
+            }
+        else:
+            item_id = entity_id if entity_type == "ITEM" else get_user_product_item_id(entity_id)
+            if not item_id:
+                return None, "without_offer"
+            listing = get_item(item_id)
+            offer = _with_sale_price({**listing, "item_id": item_id})
+            detail = {
+                "name": listing.get("title") or listing.get("family_name"),
+                "domain_id": listing.get("domain_id"),
+                "attributes": listing.get("attributes") or [],
+                "pictures": listing.get("pictures") or [],
+                "permalink": listing.get("permalink"),
+            }
+            catalog_product_id = listing.get("catalog_product_id") or ""
+            product = {
+                "id": catalog_product_id,
+                "name": detail.get("name"),
+                "domain_id": detail.get("domain_id"),
+            }
+            offer_source = "ranking_item" if entity_type == "ITEM" else "ranking_user_product"
+        item = _build_item(
+            product_id=entity_id if entity_type == "PRODUCT" else catalog_product_id,
+            product=product,
+            detail=detail,
+            offer=offer,
+            offer_source=offer_source,
+            query=entry.get("_query") or query,
+            collected_at=collected_at,
+            best_seller_position=entry.get("position"),
+            best_seller_category=entry.get("_category_id"),
+        )
+        item["_ranked_entity_type"] = entity_type
+        return item, offer_source
+    except Exception:
         return None, "without_offer"
-
-    product = {
-        "id": product_id,
-        "name": detail.get("name"),
-        "domain_id": detail.get("domain_id"),
-    }
-    item = _build_item(
-        product_id=product_id,
-        product=product,
-        detail=detail,
-        offer=offer,
-        offer_source=offer_source,
-        query=query,
-        collected_at=collected_at,
-        best_seller_position=entry.get("position"),
-    )
-    return item, offer_source
 
 
 def collect_ranked_products(
@@ -223,18 +250,23 @@ def collect_ranked_products(
         "ranking_via_product_items": 0,
         "ranking_without_offer": 0,
         "ranking_added": 0,
+        "ranking_product_entities": 0,
+        "ranking_item_entities": 0,
+        "ranking_user_product_entities": 0,
         "parallel_workers": MAX_WORKERS,
     }
 
     candidates: list[tuple[dict[str, Any], str, str]] = []
     for entry in ranked_products:
-        if entry.get("type") != "PRODUCT":
+        entity_type = entry.get("type")
+        if entity_type not in {"PRODUCT", "ITEM", "USER_PRODUCT"}:
             continue
-        product_id = entry.get("id")
-        if not product_id:
+        entity_id = entry.get("id")
+        if not entity_id:
             continue
         ranking_stats["ranking_products"] += 1
-        if product_id in existing:
+        ranking_stats[f"ranking_{entity_type.lower()}_entities"] += 1
+        if entity_id in existing:
             ranking_stats["ranking_duplicates"] += 1
             continue
         candidates.append((entry, query, collected_at))
@@ -247,7 +279,7 @@ def collect_ranked_products(
                     continue
                 if status == "buy_box_winner":
                     ranking_stats["ranking_with_buy_box"] += 1
-                elif status == "product_items":
+                elif status in {"product_items", "ranking_item", "ranking_user_product"}:
                     ranking_stats["ranking_via_product_items"] += 1
                 if item:
                     items.append(item)
@@ -286,6 +318,33 @@ def get_product_items(product_id: str) -> list[dict[str, Any]]:
         return []
     response.raise_for_status()
     return response.json().get("results", [])
+
+
+def get_item(item_id: str) -> dict[str, Any]:
+    response = meli_request(
+        "GET", f"{BASE_URL}/items/{quote_plus(item_id)}", timeout=20
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_user_product_item_id(user_product_id: str) -> str | None:
+    response = meli_request(
+        "GET", f"{BASE_URL}/user-products/{quote_plus(user_product_id)}", timeout=20
+    )
+    response.raise_for_status()
+    user_product = response.json()
+    seller_id = user_product.get("user_id")
+    if not seller_id:
+        return None
+    search = meli_request(
+        "GET",
+        f"{BASE_URL}/users/{quote_plus(str(seller_id))}/items/search",
+        params={"user_product_id": user_product_id},
+        timeout=20,
+    )
+    search.raise_for_status()
+    return next(iter(search.json().get("results") or []), None)
 
 
 def get_item_sale_price(item_id: str) -> dict[str, Any] | None:
@@ -359,4 +418,6 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         "pictures_count": len(item.get("pictures") or []),
         "tags": ",".join(item.get("tags") or []),
         "best_seller_position": item.get("_best_seller_position"),
+        "best_seller_category": item.get("_best_seller_category"),
+        "ranked_entity_type": item.get("_ranked_entity_type"),
     }
