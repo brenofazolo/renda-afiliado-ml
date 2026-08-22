@@ -198,6 +198,12 @@ def latest_search_run() -> dict[str, Any] | None:
     }
 
 
+def clear_search_runs() -> None:
+    """Remove consultas salvas sem afetar produtos aprovados ou descartados."""
+    with _connect() as connection:
+        connection.execute("DELETE FROM search_runs")
+
+
 def recent_queries(limit: int = 8) -> list[str]:
     with _connect() as connection:
         rows = connection.execute(

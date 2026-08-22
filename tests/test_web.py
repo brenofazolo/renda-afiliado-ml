@@ -119,7 +119,7 @@ class WebWorkflowTest(unittest.TestCase):
                     "limit": "12",
                 },
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
         collect.assert_called_once_with(
             "beleza e autocuidado",
             12,
@@ -224,7 +224,7 @@ class WebWorkflowTest(unittest.TestCase):
                     "sort_by": "commission",
                 },
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
         self.assertEqual(collect.call_args.args[:3], ("", 20, "MLB"))
         self.assertEqual(collect.call_args.kwargs["search_mode"], "potential")
         self.assertEqual(collect.call_args.kwargs["sort_by"], "potential")
@@ -246,7 +246,7 @@ class WebWorkflowTest(unittest.TestCase):
                     "sort_by": "commission",
                 },
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
         collect.assert_called_once_with(
             "ferramentas",
             20,
@@ -259,6 +259,20 @@ class WebWorkflowTest(unittest.TestCase):
             official_store_only=True,
             sort_by="commission",
         )
+
+    def test_refresh_uses_saved_report_and_clear_removes_it(self) -> None:
+        from app.storage import latest_search_run, save_search_run
+
+        save_search_run("persistida", 20, {})
+        with patch("app.web.collect_opportunities") as collect:
+            refreshed = self.client.get("/")
+        self.assertEqual(refreshed.status_code, 200)
+        collect.assert_not_called()
+        cleared = self.client.post(
+            "/search/clear", data={"csrf_token": self.csrf_token}
+        )
+        self.assertEqual(cleared.status_code, 302)
+        self.assertIsNone(latest_search_run())
 
 
 if __name__ == "__main__":

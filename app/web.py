@@ -14,6 +14,7 @@ from flask import Flask, Response, abort, flash, jsonify, redirect, render_templ
 from .service import collect_opportunities
 from .marketplace import category_path, get_category, get_site_categories
 from .storage import (
+    clear_search_runs,
     init_db,
     latest_search_run,
     list_selections,
@@ -236,6 +237,7 @@ def create_app() -> Flask:
                         sort_by=sort_by,
                     )
                     save_search_run(query, limit, report)
+                    return redirect(url_for("index"))
                 except Exception as exc:  # mensagem operacional sem expor traceback no navegador
                     error = str(exc)
         configured = os.getenv(
@@ -261,6 +263,12 @@ def create_app() -> Flask:
             sort_by=sort_by,
             restored=bool(latest),
         )
+
+    @app.post("/search/clear")
+    @login_required
+    def clear_search() -> Response:
+        clear_search_runs()
+        return redirect(url_for("index"))
 
     @app.get("/categories")
     @login_required
