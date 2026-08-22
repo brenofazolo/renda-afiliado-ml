@@ -182,11 +182,33 @@ def collect_opportunities(
     )
     raw_search_items: list[dict[str, Any]] = []
     if general_potential:
-        collection_stats.update(
-            products_found=0, dominant_domain=None, filtered_by_domain=0,
-            with_buy_box=0, via_product_items=0, without_offer=0, analyzed=0,
-        )
-        known_product_ids: set[str] = set()
+        def collect_potential_pool(per_seed_limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+            pool_stats: dict[str, Any] = {
+                "products_found": 0, "dominant_domain": None,
+                "filtered_by_domain": 0, "with_buy_box": 0,
+                "via_product_items": 0, "without_offer": 0, "analyzed": 0,
+            }
+            pool: list[dict[str, Any]] = []
+            known_product_ids: set[str] = set()
+            for discovery_query in POTENTIAL_DISCOVERY_QUERIES:
+                seed_stats: dict[str, Any] = {}
+                seed_items = search_items(
+                    discovery_query,
+                    per_seed_limit,
+                    site_id,
+                    seed_stats,
+                    restrict_to_dominant_domain=True,
+                )
+                _merge_collection_stats(pool_stats, seed_stats)
+                for item in seed_items:
+                    product_id = item.get("catalog_product_id")
+                    if product_id and product_id in known_product_ids:
+                        continue
+                    if product_id:
+                        known_product_ids.add(product_id)
+                    pool.append(item)
+            return pool, pool_stats
+
         # O limite pedido representa resultados finais. Na descoberta geral precisamos
         # examinar uma base maior porque ofertas inacessíveis e produtos repetidos são
         # removidos antes da ordenação pelo potencial.
@@ -194,23 +216,32 @@ def collect_opportunities(
             12,
             max(6, ceil((limit * 2) / len(POTENTIAL_DISCOVERY_QUERIES))),
         )
-        for discovery_query in POTENTIAL_DISCOVERY_QUERIES:
-            seed_stats: dict[str, Any] = {}
-            seed_items = search_items(
-                discovery_query,
-                per_query_limit,
-                site_id,
-                seed_stats,
-                restrict_to_dominant_domain=True,
-            )
-            _merge_collection_stats(collection_stats, seed_stats)
-            for item in seed_items:
-                product_id = item.get("catalog_product_id")
-                if product_id and product_id in known_product_ids:
-                    continue
-                if product_id:
-                    known_product_ids.add(product_id)
-                raw_search_items.append(item)
+        raw_search_items, collection_stats = collect_potential_pool(per_query_limit)
+
+        # Uma única segunda coleta, com teto seguro, evita que filtros restritivos
+        # (especialmente loja oficial) deixem a tela quase vazia por falta de base.
+        filters_are_restrictive = any(
+            (brand_filter, max_price is not None, min_commission is not None, official_store_only)
+        )
+        normalized_preview = [normalize_item(item) for item in raw_search_items]
+        preview_qualified = sum(
+            1 for item in normalized_preview
+            if (not brand_filter or brand_matches(item, brand_filter))
+            and (max_price is None or (item.get("price") is not None and item["price"] <= max_price))
+            and (not official_store_only or item.get("official_store_id"))
+        )
+        minimum_useful_pool = min(limit, 8)
+        if (
+            filters_are_restrictive
+            and (min_commission is not None or preview_qualified < minimum_useful_pool)
+            and per_query_limit < 12
+        ):
+            initial_candidates = collection_stats.get("products_found", len(raw_search_items))
+            raw_search_items, collection_stats = collect_potential_pool(12)
+            collection_stats["auto_expanded"] = True
+            collection_stats["initial_candidates"] = initial_candidates
+        else:
+            collection_stats["auto_expanded"] = False
     elif not category_id:
         raw_search_items = search_items(
             query, limit, site_id, collection_stats,

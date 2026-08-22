@@ -105,6 +105,7 @@ class WebWorkflowTest(unittest.TestCase):
         self.assertIn(b'name="search_mode"', page.data)
         self.assertIn("Filtros comerciais".encode(), page.data)
         self.assertIn("Potencial de Renda".encode(), page.data)
+        self.assertIn("Máximo de resultados".encode(), page.data)
         self.assertIn(b'value="potential"', page.data)
         self.assertIn(b'navigation.js', page.data)
         self.assertIn(b'rel="icon"', page.data)

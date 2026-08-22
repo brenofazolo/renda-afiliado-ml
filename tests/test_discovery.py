@@ -117,6 +117,16 @@ class BrandDiscoveryTest(unittest.TestCase):
         self.assertTrue(report["general_potential"])
         self.assertEqual(report["filters"]["sort_by"], "potential")
 
+    def test_general_potential_expands_once_for_restrictive_filters(self) -> None:
+        with patch("app.service.search_items", return_value=[]) as search:
+            report = collect_opportunities(
+                "", 20, "MLB", search_mode="potential", official_store_only=True
+            )
+        self.assertEqual(search.call_count, 12)
+        self.assertEqual([call.args[1] for call in search.call_args_list[:6]], [7] * 6)
+        self.assertEqual([call.args[1] for call in search.call_args_list[6:]], [12] * 6)
+        self.assertTrue(report["collection_stats"]["auto_expanded"])
+
 
 if __name__ == "__main__":
     unittest.main()
