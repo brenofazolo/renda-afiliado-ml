@@ -113,6 +113,7 @@ class BrandDiscoveryTest(unittest.TestCase):
                 "", 20, "MLB", search_mode="potential", sort_by="commission"
             )
         self.assertEqual(search.call_count, 6)
+        self.assertTrue(all(call.args[1] == 7 for call in search.call_args_list))
         self.assertTrue(report["general_potential"])
         self.assertEqual(report["filters"]["sort_by"], "potential")
 

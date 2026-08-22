@@ -4,6 +4,7 @@ import time
 import unicodedata
 from collections import Counter
 from datetime import datetime
+from math import ceil
 from typing import Any
 from urllib.parse import quote_plus
 
@@ -186,7 +187,13 @@ def collect_opportunities(
             with_buy_box=0, via_product_items=0, without_offer=0, analyzed=0,
         )
         known_product_ids: set[str] = set()
-        per_query_limit = max(3, min(8, limit // len(POTENTIAL_DISCOVERY_QUERIES) or 3))
+        # O limite pedido representa resultados finais. Na descoberta geral precisamos
+        # examinar uma base maior porque ofertas inacessíveis e produtos repetidos são
+        # removidos antes da ordenação pelo potencial.
+        per_query_limit = min(
+            12,
+            max(6, ceil((limit * 2) / len(POTENTIAL_DISCOVERY_QUERIES))),
+        )
         for discovery_query in POTENTIAL_DISCOVERY_QUERIES:
             seed_stats: dict[str, Any] = {}
             seed_items = search_items(
