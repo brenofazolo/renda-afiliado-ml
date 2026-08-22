@@ -59,6 +59,16 @@ def get_category_best_sellers(category_id: str, site_id: str = "MLB") -> list[di
     return response.json().get("content", [])
 
 
+def get_trends(site_id: str = "MLB") -> list[dict[str, Any]]:
+    """Retorna os termos em tendência publicados semanalmente pelo marketplace."""
+    response = meli_request(
+        "GET", f"{BASE_URL}/trends/{quote_plus(site_id)}", timeout=20
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return payload if isinstance(payload, list) else []
+
+
 def category_path(category: dict[str, Any]) -> str:
     path = category.get("path_from_root") or []
     return " > ".join(node.get("name", "") for node in path if node.get("name"))

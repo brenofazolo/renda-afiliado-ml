@@ -53,7 +53,9 @@ class BrandDiscoveryTest(unittest.TestCase):
         self.assertEqual(removed, 1)
 
     def test_category_mode_preserves_multiple_domains_without_single_ranking(self) -> None:
-        with patch("app.service.search_items", return_value=[]) as search:
+        with patch("app.service.get_trends", return_value=[]), patch(
+            "app.service.search_items", return_value=[]
+        ) as search:
             report = collect_opportunities(
                 "casa e cozinha", 50, "MLB", search_mode="category"
             )
@@ -108,7 +110,9 @@ class BrandDiscoveryTest(unittest.TestCase):
         self.assertEqual(ordering, "potential")
 
     def test_general_potential_builds_a_multi_query_pool(self) -> None:
-        with patch("app.service.search_items", return_value=[]) as search:
+        with patch("app.service.get_trends", return_value=[]), patch(
+            "app.service.search_items", return_value=[]
+        ) as search:
             report = collect_opportunities(
                 "", 20, "MLB", search_mode="potential", sort_by="commission"
             )
@@ -118,7 +122,9 @@ class BrandDiscoveryTest(unittest.TestCase):
         self.assertEqual(report["filters"]["sort_by"], "potential")
 
     def test_general_potential_expands_once_for_restrictive_filters(self) -> None:
-        with patch("app.service.search_items", return_value=[]) as search:
+        with patch("app.service.get_trends", return_value=[]), patch(
+            "app.service.search_items", return_value=[]
+        ) as search:
             report = collect_opportunities(
                 "", 20, "MLB", search_mode="potential", official_store_only=True
             )
@@ -126,6 +132,22 @@ class BrandDiscoveryTest(unittest.TestCase):
         self.assertEqual([call.args[1] for call in search.call_args_list[:6]], [7] * 6)
         self.assertEqual([call.args[1] for call in search.call_args_list[6:]], [12] * 6)
         self.assertTrue(report["collection_stats"]["auto_expanded"])
+
+    def test_general_potential_uses_weekly_trends_as_sources(self) -> None:
+        trends = [{"keyword": f"tendência {index}"} for index in range(1, 6)]
+        with patch("app.service.get_trends", return_value=trends), patch(
+            "app.service.search_items", return_value=[]
+        ) as search:
+            report = collect_opportunities("", 20, "MLB", search_mode="potential")
+        self.assertEqual(search.call_count, 10)
+        self.assertEqual(
+            [call.args[0] for call in search.call_args_list[:4]],
+            ["tendência 1", "tendência 2", "tendência 3", "tendência 4"],
+        )
+        self.assertEqual(
+            report["collection_stats"]["trend_queries"],
+            ["tendência 1", "tendência 2", "tendência 3", "tendência 4"],
+        )
 
 
 if __name__ == "__main__":

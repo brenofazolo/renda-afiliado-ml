@@ -330,6 +330,7 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "collected_at": item.get("_collected_at"),
         "query": item.get("_query"),
+        "discovery_source": item.get("_discovery_source") or "Pesquisa",
         "position": item.get("_collection_position"),
         "catalog_product_id": item.get("catalog_product_id"),
         "domain_id": item.get("domain_id"),

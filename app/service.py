@@ -10,7 +10,7 @@ from urllib.parse import quote_plus
 
 from .affiliate import estimate_commission, find_commission, load_rules
 from .collector import collect_ranked_products, normalize_item, search_items
-from .marketplace import category_path, get_category, get_category_best_sellers
+from .marketplace import category_path, get_category, get_category_best_sellers, get_trends
 from .scoring import calculate_score
 
 BRAND_STOP_WORDS = {"a", "as", "da", "das", "de", "do", "dos", "e", "o", "os"}
@@ -182,6 +182,19 @@ def collect_opportunities(
     )
     raw_search_items: list[dict[str, Any]] = []
     if general_potential:
+        try:
+            trend_queries = [
+                entry.get("keyword", "").strip()
+                for entry in get_trends(site_id)[:4]
+                if entry.get("keyword", "").strip()
+            ]
+        except Exception:
+            trend_queries = []
+        seed_queries = (
+            [(value, "Tendência") for value in trend_queries]
+            + [(value, "Radar base") for value in POTENTIAL_DISCOVERY_QUERIES]
+        )
+
         def collect_potential_pool(per_seed_limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
             pool_stats: dict[str, Any] = {
                 "products_found": 0, "dominant_domain": None,
@@ -190,7 +203,7 @@ def collect_opportunities(
             }
             pool: list[dict[str, Any]] = []
             known_product_ids: set[str] = set()
-            for discovery_query in POTENTIAL_DISCOVERY_QUERIES:
+            for discovery_query, discovery_source in seed_queries:
                 seed_stats: dict[str, Any] = {}
                 seed_items = search_items(
                     discovery_query,
@@ -201,6 +214,7 @@ def collect_opportunities(
                 )
                 _merge_collection_stats(pool_stats, seed_stats)
                 for item in seed_items:
+                    item["_discovery_source"] = discovery_source
                     product_id = item.get("catalog_product_id")
                     if product_id and product_id in known_product_ids:
                         continue
@@ -214,9 +228,11 @@ def collect_opportunities(
         # removidos antes da ordenação pelo potencial.
         per_query_limit = min(
             12,
-            max(6, ceil((limit * 2) / len(POTENTIAL_DISCOVERY_QUERIES))),
+            max(4, ceil((limit * 2) / len(seed_queries))),
         )
         raw_search_items, collection_stats = collect_potential_pool(per_query_limit)
+        collection_stats["trend_queries"] = trend_queries
+        collection_stats["trends_available"] = bool(trend_queries)
 
         # Uma única segunda coleta, com teto seguro, evita que filtros restritivos
         # (especialmente loja oficial) deixem a tela quase vazia por falta de base.
@@ -237,9 +253,12 @@ def collect_opportunities(
             and per_query_limit < 12
         ):
             initial_candidates = collection_stats.get("products_found", len(raw_search_items))
-            raw_search_items, collection_stats = collect_potential_pool(12)
+            expanded_seed_limit = min(12, max(8, per_query_limit * 2))
+            raw_search_items, collection_stats = collect_potential_pool(expanded_seed_limit)
             collection_stats["auto_expanded"] = True
             collection_stats["initial_candidates"] = initial_candidates
+            collection_stats["trend_queries"] = trend_queries
+            collection_stats["trends_available"] = bool(trend_queries)
         else:
             collection_stats["auto_expanded"] = False
     elif not category_id:
