@@ -103,7 +103,8 @@ class WebWorkflowTest(unittest.TestCase):
     def test_discovery_mode_and_preset_controls(self) -> None:
         page = self.client.get("/")
         self.assertIn(b'name="search_mode"', page.data)
-        self.assertIn("Atalhos de descoberta".encode(), page.data)
+        self.assertIn("Filtros comerciais".encode(), page.data)
+        self.assertIn("Potencial de Renda".encode(), page.data)
         self.assertIn(b'rel="icon"', page.data)
         with patch("app.web.collect_opportunities", return_value={}) as collect:
             response = self.client.post(
@@ -117,7 +118,16 @@ class WebWorkflowTest(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
         collect.assert_called_once_with(
-            "beleza e autocuidado", 12, "MLB", search_mode="niche", category_id=None
+            "beleza e autocuidado",
+            12,
+            "MLB",
+            search_mode="niche",
+            category_id=None,
+            brand_filter=None,
+            max_price=None,
+            min_commission=None,
+            official_store_only=False,
+            sort_by="potential",
         )
 
     def test_help_and_category_tree_pages(self) -> None:
@@ -144,6 +154,26 @@ class WebWorkflowTest(unittest.TestCase):
         self.assertIn("Consultar esta categoria".encode(), page.data)
         self.assertIn("Ferramentas elétricas".encode(), page.data)
 
+        with (
+            patch(
+                "app.web.get_site_categories",
+                return_value=[{"id": "MLB1", "name": "Ferramentas"}],
+            ),
+            patch(
+                "app.web.get_category",
+                return_value={
+                    "id": "MLB1",
+                    "name": "Ferramentas",
+                    "path_from_root": [{"id": "MLB1", "name": "Ferramentas"}],
+                    "children_categories": [],
+                },
+            ),
+        ):
+            roots = self.client.get("/api/categories")
+            children = self.client.get("/api/categories/MLB1")
+        self.assertEqual(roots.get_json()[0]["name"], "Ferramentas")
+        self.assertEqual(children.get_json()["path"][0]["id"], "MLB1")
+
     def test_active_login_redirects_and_idle_session_expires(self) -> None:
         self.assertEqual(self.client.get("/login").status_code, 302)
         with self.client.session_transaction() as current_session:
@@ -153,6 +183,37 @@ class WebWorkflowTest(unittest.TestCase):
         self.assertIn("Sua sessão expirou".encode(), response.data)
         with self.client.session_transaction() as current_session:
             self.assertFalse(current_session.get("authenticated"))
+
+    def test_commercial_filters_are_parsed_and_forwarded(self) -> None:
+        with patch("app.web.collect_opportunities", return_value={}) as collect:
+            response = self.client.post(
+                "/",
+                data={
+                    "csrf_token": self.csrf_token,
+                    "query": "ferramentas",
+                    "search_mode": "category",
+                    "category_id": "MLB1",
+                    "limit": "20",
+                    "brand_filter": "Bosch",
+                    "max_price": "1.299,90",
+                    "min_commission": "25,50",
+                    "official_store_only": "on",
+                    "sort_by": "commission",
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        collect.assert_called_once_with(
+            "ferramentas",
+            20,
+            "MLB",
+            search_mode="category",
+            category_id="MLB1",
+            brand_filter="Bosch",
+            max_price=1299.9,
+            min_commission=25.5,
+            official_store_only=True,
+            sort_by="commission",
+        )
 
 
 if __name__ == "__main__":

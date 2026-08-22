@@ -9,7 +9,7 @@ from functools import wraps
 from typing import Any, Callable
 
 from dotenv import load_dotenv
-from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
 
 from .service import collect_opportunities
 from .marketplace import category_path, get_category, get_site_categories
@@ -177,6 +177,34 @@ def create_app() -> Flask:
             search_mode = "product"
         restored_category_id = (latest or {}).get("report", {}).get("category_id", "")
         category_id = request.form.get("category_id", restored_category_id).strip()
+        restored_filters = (latest or {}).get("report", {}).get("filters", {})
+        brand_filter = request.form.get("brand_filter", restored_filters.get("brand") or "").strip()
+
+        def optional_number(name: str) -> float | None:
+            raw = request.form.get(name)
+            if raw is None and latest:
+                restored_value = restored_filters.get(name)
+                return float(restored_value) if restored_value is not None else None
+            raw = (raw or "").strip()
+            if not raw:
+                return None
+            if "," in raw:
+                raw = raw.replace(".", "").replace(",", ".")
+            try:
+                return max(0, float(raw))
+            except ValueError:
+                return None
+
+        max_price = optional_number("max_price")
+        min_commission = optional_number("min_commission")
+        official_store_only = (
+            request.form.get("official_store_only") == "on"
+            if request.method == "POST"
+            else bool(restored_filters.get("official_store_only"))
+        )
+        sort_by = request.form.get("sort_by", restored_filters.get("sort_by", "potential"))
+        if sort_by not in {"potential", "commission", "bestseller", "price"}:
+            sort_by = "potential"
         try:
             default_limit = latest["limit"] if latest else os.getenv("MELI_LIMIT", "20")
             limit = max(1, min(int(request.form.get("limit", default_limit)), 50))
@@ -195,6 +223,11 @@ def create_app() -> Flask:
                         os.getenv("MELI_SITE_ID", "MLB"),
                         search_mode=search_mode,
                         category_id=category_id or None,
+                        brand_filter=brand_filter or None,
+                        max_price=max_price,
+                        min_commission=min_commission,
+                        official_store_only=official_store_only,
+                        sort_by=sort_by,
                     )
                     save_search_run(query, limit, report)
                 except Exception as exc:  # mensagem operacional sem expor traceback no navegador
@@ -215,6 +248,11 @@ def create_app() -> Flask:
             search_modes=SEARCH_MODES,
             search_presets=SEARCH_PRESETS,
             category_id=category_id,
+            brand_filter=brand_filter,
+            max_price=max_price,
+            min_commission=min_commission,
+            official_store_only=official_store_only,
+            sort_by=sort_by,
             restored=bool(latest),
         )
 
@@ -237,6 +275,25 @@ def create_app() -> Flask:
             selected=selected,
             selected_path=category_path(selected) if selected else None,
             error=error,
+        )
+
+    @app.get("/api/categories")
+    @login_required
+    def category_roots() -> Response:
+        roots = get_site_categories(os.getenv("MELI_SITE_ID", "MLB"))
+        return jsonify([{"id": node.get("id"), "name": node.get("name")} for node in roots])
+
+    @app.get("/api/categories/<category_id>")
+    @login_required
+    def category_children(category_id: str) -> Response:
+        category = get_category(category_id)
+        return jsonify(
+            {
+                "id": category.get("id"),
+                "name": category.get("name"),
+                "path": category.get("path_from_root") or [],
+                "children": category.get("children_categories") or [],
+            }
         )
 
     @app.get("/help")

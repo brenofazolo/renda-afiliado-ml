@@ -236,6 +236,19 @@ o nó selecionado. Nesse fluxo, o backend envia o `category_id` oficial ao recur
 de mais vendidos e não utiliza a pesquisa textual como substituto da categoria.
 Categorias sem ranking oficial podem retornar uma lista vazia.
 
+## Filtros comerciais e Potencial de Renda
+
+A tela **Descobrir** concentra o funil principal: marketplace, forma de
+descoberta, categoria hierárquica, marca, preço máximo, comissão direta mínima,
+loja oficial e ordenação. A arquitetura já identifica o marketplace, embora o
+piloto ofereça apenas Mercado Livre neste momento.
+
+A ordenação padrão é **Potencial de Renda**, nome de produto para o score
+provisório que combina demanda, preço/oferta, comissão, frete, condição,
+potencial visual e loja oficial. Também é possível ordenar por comissão, posição
+entre os mais vendidos ou menor preço. O indicador é uma hipótese mensurável e
+deverá evoluir com os resultados reais das divulgações.
+
 No modo **Marca**, o backend confirma a marca pelo atributo oficial `BRAND` do
 catálogo e usa o título apenas quando esse atributo não estiver disponível. Os
 itens de outras marcas encontrados na busca ou no ranking da categoria são

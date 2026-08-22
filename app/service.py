@@ -83,6 +83,49 @@ def _merge_collection_stats(target: dict[str, Any], extra: dict[str, Any]) -> No
         target[key] = int(target.get(key, 0)) + int(extra.get(key, 0))
 
 
+def apply_commercial_filters(
+    items: list[dict[str, Any]],
+    brand_filter: str | None = None,
+    max_price: float | None = None,
+    min_commission: float | None = None,
+    official_store_only: bool = False,
+    sort_by: str = "potential",
+    limit: int = 50,
+) -> tuple[list[dict[str, Any]], dict[str, int], str]:
+    stats = {
+        "before_commercial_filters": len(items),
+        "brand": 0,
+        "max_price": 0,
+        "min_commission": 0,
+        "official_store": 0,
+    }
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        if brand_filter and not brand_matches(item, brand_filter):
+            stats["brand"] += 1
+        elif max_price is not None and (item.get("price") is None or item["price"] > max_price):
+            stats["max_price"] += 1
+        elif min_commission is not None and (
+            item.get("affiliate_direct_value") is None
+            or item["affiliate_direct_value"] < min_commission
+        ):
+            stats["min_commission"] += 1
+        elif official_store_only and not item.get("official_store_id"):
+            stats["official_store"] += 1
+        else:
+            filtered.append(item)
+    if sort_by == "commission":
+        filtered.sort(key=lambda item: item.get("affiliate_direct_value") or 0, reverse=True)
+    elif sort_by == "bestseller":
+        filtered.sort(key=lambda item: (item.get("best_seller_position") is None, item.get("best_seller_position") or 9999))
+    elif sort_by == "price":
+        filtered.sort(key=lambda item: item.get("price") if item.get("price") is not None else float("inf"))
+    else:
+        sort_by = "potential"
+        filtered.sort(key=lambda item: item.get("potential_score") or 0, reverse=True)
+    return filtered[:limit], stats, sort_by
+
+
 def marketplace_search_url(title: str | None) -> str | None:
     if not title:
         return None
@@ -110,6 +153,11 @@ def collect_opportunities(
     site_id: str = "MLB",
     search_mode: str = "product",
     category_id: str | None = None,
+    brand_filter: str | None = None,
+    max_price: float | None = None,
+    min_commission: float | None = None,
+    official_store_only: bool = False,
+    sort_by: str = "potential",
 ) -> dict[str, Any]:
     """Executa o pipeline do MVP e retorna resultados e diagnóstico da coleta."""
     started_at = datetime.now().astimezone()
@@ -263,6 +311,7 @@ def collect_opportunities(
         item["commission_rule"] = rule.get("label") if rule else None
         score, components = calculate_score(item, len(items))
         item["marketplace_score"] = score
+        item["potential_score"] = score
         item["score_status"] = "provisório"
         item["score_components"] = "; ".join(
             f"{key}={value}" for key, value in components.items()
@@ -271,7 +320,15 @@ def collect_opportunities(
         item["catalog_url"] = catalog_product_url(
             item.get("catalog_product_id"), site_id
         )
-    items.sort(key=lambda item: item["marketplace_score"], reverse=True)
+    items, filter_stats, sort_by = apply_commercial_filters(
+        items,
+        brand_filter=brand_filter,
+        max_price=max_price,
+        min_commission=min_commission,
+        official_store_only=official_store_only,
+        sort_by=sort_by,
+        limit=limit,
+    )
     timings["comissao_e_score"] = time.perf_counter() - stage
 
     finished_at = datetime.now().astimezone()
@@ -292,6 +349,14 @@ def collect_opportunities(
         "broad_discovery": broad_discovery,
         "fallback_queries": fallback_queries,
         "fallback_added": fallback_added,
+        "filters": {
+            "brand": brand_filter,
+            "max_price": max_price,
+            "min_commission": min_commission,
+            "official_store_only": official_store_only,
+            "sort_by": sort_by,
+        },
+        "filter_stats": filter_stats,
         "started_at": started_at,
         "finished_at": finished_at,
         "elapsed_seconds": time.perf_counter() - started_perf,

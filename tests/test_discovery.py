@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from app.collector import _build_item, normalize_item
 from app.service import (
+    apply_commercial_filters,
     brand_matches,
     broad_query_expansions,
     collect_opportunities,
@@ -86,6 +87,25 @@ class BrandDiscoveryTest(unittest.TestCase):
         ranking.assert_called_once_with("MLB1", "MLB")
         self.assertEqual(report["category_id"], "MLB1")
         self.assertEqual(report["selected_category_label"], "Ferramentas")
+
+    def test_commercial_filters_keep_only_qualified_opportunities(self) -> None:
+        items = [
+            {"title": "Bosch A", "brand": "Bosch", "price": 200, "affiliate_direct_value": 30, "official_store_id": 1, "potential_score": 70},
+            {"title": "Bosch B", "brand": "Bosch", "price": 400, "affiliate_direct_value": 60, "official_store_id": 2, "potential_score": 90},
+            {"title": "Outra", "brand": "Outra", "price": 100, "affiliate_direct_value": 40, "official_store_id": 3, "potential_score": 95},
+        ]
+        filtered, stats, ordering = apply_commercial_filters(
+            items,
+            brand_filter="Bosch",
+            max_price=300,
+            min_commission=25,
+            official_store_only=True,
+            sort_by="potential",
+        )
+        self.assertEqual([item["title"] for item in filtered], ["Bosch A"])
+        self.assertEqual(stats["brand"], 1)
+        self.assertEqual(stats["max_price"], 1)
+        self.assertEqual(ordering, "potential")
 
 
 if __name__ == "__main__":
